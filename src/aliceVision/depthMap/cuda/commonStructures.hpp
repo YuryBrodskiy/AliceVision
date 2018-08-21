@@ -1013,7 +1013,7 @@ typedef cameraStructBase DeviceCameraStructBase;
 
 struct cameraStruct
 {
-    const cameraStructBase* base;
+    const cameraStructBase* param_hst;
     CudaHostMemoryHeap<uchar4, 2>* tex_rgba_hmh;
     int camId;
 };
