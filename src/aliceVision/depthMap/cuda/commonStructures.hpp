@@ -285,6 +285,15 @@ public:
     {
         return buffer;
     }
+    Type& operator()(size_t x)
+    {
+        return buffer[x];
+    }
+    Type& operator()(size_t x, size_t y)
+    {
+        Type* row = getRow( y );
+        return row[x];
+    }
 
     const CudaSize<Dim> stride() const
     {
@@ -335,6 +344,14 @@ public:
         }
 
         buffer = nullptr;
+    }
+
+private:
+    Type* getRow( size_t row )
+    {
+        unsigned char* ptr = (unsigned char*)buffer;
+        ptr += row * pitch;
+        return (Type*)ptr;
     }
 };
 
@@ -684,46 +701,46 @@ template<class Type, unsigned Dim> void copy(CudaHostMemoryHeap<Type, Dim>& _dst
 template<class Type, unsigned Dim>
 void CudaDeviceMemoryPitched<Type, Dim>::copyFrom( const CudaHostMemoryHeap<Type, Dim>& _src )
 {
-  cudaMemcpyKind kind = cudaMemcpyHostToDevice;
-  if(Dim == 1)
-  {
-    cudaError_t err = cudaMemcpy(this->getBuffer(), _src.getBuffer(), _src.getBytes(), kind);
-    if( err != cudaSuccess )
+    const cudaMemcpyKind kind = cudaMemcpyHostToDevice;
+    if(Dim == 1)
     {
-      ALICEVISION_LOG_ERROR( "Failed to copy : " << __FILE__ << " " << __LINE__ << ", " << cudaGetErrorString(err) );
+        cudaError_t err = cudaMemcpy(this->getBuffer(), _src.getBuffer(), _src.getBytes(), kind);
+        if( err != cudaSuccess )
+        {
+            ALICEVISION_LOG_ERROR( "Failed to copy : " << __FILE__ << " " << __LINE__ << ", " << cudaGetErrorString(err) );
+        }
     }
-  }
-  else if(Dim == 2)
-  {
-    cudaError_t err = cudaMemcpy2D(this->getBuffer(),
-                                   this->getPitch(),
-                                   _src.getBuffer(),
-                                   _src.getSize()[0] * sizeof (Type),
-                                   _src.getSize()[0] * sizeof (Type),
-                                   _src.getSize()[1],
-                                   kind);
-    if( err != cudaSuccess )
+    else if(Dim == 2)
     {
-      ALICEVISION_LOG_ERROR( "Failed to copy : " << __FILE__ << " " << __LINE__ << ", " << cudaGetErrorString(err) );
+        cudaError_t err = cudaMemcpy2D(this->getBuffer(),
+                                       this->getPitch(),
+                                       _src.getBuffer(),
+                                       _src.getSize()[0] * sizeof (Type),
+                                       _src.getSize()[0] * sizeof (Type),
+                                       _src.getSize()[1],
+                                       kind);
+        if( err != cudaSuccess )
+        {
+            ALICEVISION_LOG_ERROR( "Failed to copy : " << __FILE__ << " " << __LINE__ << ", " << cudaGetErrorString(err) );
+        }
     }
-  }
-  else if(Dim >= 3)
-  {
-    for (unsigned int slice=0; slice<_src.getSize()[2]; slice++)
+    else if(Dim >= 3)
     {
-      cudaError_t err = cudaMemcpy2D( &this->getBuffer()[slice * this->stride()[1]],
-                                      this->getPitch(),
-                                      _src.getBuffer() + slice * _src.getSize()[0] * _src.getSize()[1],
-                                      _src.getSize()[0] * sizeof (Type),
-                                      _src.getSize()[0] * sizeof (Type),
-                                      _src.getSize()[1],
-                                      kind);
-      if( err != cudaSuccess )
-      {
-        ALICEVISION_LOG_ERROR( "Failed to copy : " << __FILE__ << " " << __LINE__ << ", " << cudaGetErrorString(err) );
-      }
+        for (unsigned int slice=0; slice<_src.getSize()[2]; slice++)
+        {
+            cudaError_t err = cudaMemcpy2D( &this->getBuffer()[slice * this->stride()[1]],
+                                            this->getPitch(),
+                                            _src.getBuffer() + slice * _src.getSize()[0] * _src.getSize()[1],
+                                            _src.getSize()[0] * sizeof (Type),
+                                            _src.getSize()[0] * sizeof (Type),
+                                            _src.getSize()[1],
+                                            kind);
+            if( err != cudaSuccess )
+            {
+                ALICEVISION_LOG_ERROR( "Failed to copy : " << __FILE__ << " " << __LINE__ << ", " << cudaGetErrorString(err) );
+            }
+        }
     }
-  }
 }
 
 template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const CudaHostMemoryHeap<Type, Dim>& _src)
@@ -1014,6 +1031,7 @@ typedef cameraStructBase DeviceCameraStructBase;
 struct cameraStruct
 {
     const cameraStructBase* param_hst;
+    const cameraStructBase* param_dev;
     CudaHostMemoryHeap<uchar4, 2>* tex_rgba_hmh;
     int camId;
 };
