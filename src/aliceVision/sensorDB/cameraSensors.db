@@ -1117,6 +1117,8 @@ Fujifilm;Fujifilm FinePix XP50;6.16
 Fujifilm;Fujifilm FinePix XP60;6.16
 Fujifilm;Fujifilm FinePix XP70;6.16
 Fujifilm;Fujifilm FinePix XP80;6.16
+Fujifilm;Fujifilm FinePix XP90;6.16
+Fujifilm;Fujifilm FinePix XP90 XP91 XP95;6.16
 Fujifilm;Fujifilm FinePix Z1;5.75
 Fujifilm;Fujifilm FinePix Z1000EXR;6.4
 Fujifilm;Fujifilm FinePix Z100fd;5.75
@@ -1226,6 +1228,7 @@ GE;GE X3;6.08
 GE;GE X500;6.16
 GE;GE X550;6.16
 GE;GE X600;6.16
+Google;Google Pixel XL;6.25
 GoPro;HERO3+ Black Edition;6.2
 GoPro;HERO4 Black;5.75
 GoPro;HERO4 Silver;5.75
@@ -1739,6 +1742,7 @@ Minox;Minox Mobi DV;6.4
 Minox;Minox Rolleiflex MiniDigi;6.4
 Motorola;Moto G (4);6.06
 Motorola;XT1033;3.8
+motorola;XT1635-02;6.06
 Nikon;Nikon 1 AW1;13.2
 Nikon;Nikon 1 J1;13.2
 Nikon;Nikon 1 J2;13.2
@@ -3488,7 +3492,7 @@ Sony;Sony Cybershot DSC HX30V;6.16
 Sony;Sony Cybershot DSC HX5;5.9
 Sony;Sony Cybershot DSC HX50;6.16
 Sony;Sony Cybershot DSC HX60;6.16
-Sony;Sony CyberShot DSC HX7V;6.16
+Sony;Sony CyberShot DSC-HX7V;6.16
 Sony;Sony CyberShot DSC HX9V;6.16
 Sony;Sony Cybershot DSC J10;6.16
 Sony;Sony Cybershot DSC L1;5.33
