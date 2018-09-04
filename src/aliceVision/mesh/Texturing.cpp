@@ -397,7 +397,17 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
     ALICEVISION_LOG_INFO("Reading pixel color.");
 
     std::vector<AccuColor> perPixelColors(textureSize);
-
+    // @Yury Generate 3D color pont cloud
+    struct Point3DColor
+    {
+        Point3d _point;
+        Color _color;
+        Point3DColor(Point3d point, Color color)
+            : _point(point)
+            , _color(color){};
+    };
+    std::vector<Point3DColor> coloredPointCloud;
+    std::vector<bool> colored(me->pts->size(), false);
     // iterate over triangles for each camera
     int camId = 0;
     for(const std::vector<unsigned int>& triangles : camTriangles)
@@ -405,6 +415,50 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
         ALICEVISION_LOG_INFO(" - camera " << camId + 1 << "/" << mp.ncams << " (" << triangles.size() << " triangles)");
 
         imageCache.refreshData(camId);
+        // Color point cloud generation
+        for(int ti = 0; ti < triangles.size(); ++ti)
+        {
+            const unsigned int triangleId = triangles[ti];
+
+            Point3d triPts[3];
+
+            for(int k = 0; k < 3; k++)
+            {
+                const int pointIndex = (*me->tris)[triangleId].v[k];
+                triPts[k] = (*me->pts)[pointIndex]; // 3D coordinates
+                Point2d pixRC;
+                mp.getPixelFor3DPoint(&pixRC, triPts[k], camId);
+                if(!mp.isPixelInImage(pixRC, camId))
+                {
+                }
+                else
+                {
+                    Color color = imageCache.getPixelValueInterpolated(&pixRC, camId);
+                    if(!colored[pointIndex])
+                    {
+                        coloredPointCloud.push_back(Point3DColor(triPts[k], color));
+                        colored[pointIndex] = true;
+                    }   
+                }
+            }
+        }
+        {
+            long t = std::clock();
+            ALICEVISION_LOG_DEBUG("Save points to xyz.");
+            // printf("open\n");
+            bfs::path coloredPointCloudPath = outPath / "coloredPCD.xyz";
+            FILE* f = fopen(coloredPointCloudPath.string().c_str(), "wb");
+
+            for(int i = 0; i < coloredPointCloud.size(); i++)
+                fprintf(f, "%f %f %f %f %f %f\n", coloredPointCloud[i]._point.x, coloredPointCloud[i]._point.y,
+                        coloredPointCloud[i]._point.z, coloredPointCloud[i]._color.r * 255,
+                        coloredPointCloud[i]._color.g * 255, coloredPointCloud[i]._color.b * 255);
+            fclose(f);
+            // printf("done\n");
+            mvsUtils::printfElapsedTime(t, "Save points to xyz ");
+        }
+            // end Color point cloud generation
+
         #pragma omp parallel for
         for(int ti = 0; ti < triangles.size(); ++ti)
         {

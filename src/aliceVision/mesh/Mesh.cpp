@@ -101,6 +101,21 @@ void Mesh::saveToBin(std::string binFileName)
     mvsUtils::printfElapsedTime(t, "Save mesh to bin ");
 }
 
+void Mesh::saveToXYZ(std::string xyzFileName)
+{
+    long t = std::clock();
+    ALICEVISION_LOG_DEBUG("Save points to xyz.");
+    // printf("open\n");
+    FILE* f = fopen(xyzFileName.c_str(), "wb");
+    int npts = pts->size();
+
+	for(int i = 0; i < pts->size(); i++)
+        fprintf(f, "%f %f %f\n", (*pts)[i].x, (*pts)[i].y, (*pts)[i].z);
+    fclose(f);
+    // printf("done\n");
+    mvsUtils::printfElapsedTime(t, "Save points to xyz ");
+}
+
 void Mesh::addMesh(Mesh* me)
 {
     int npts = sizeOfStaticVector<Point3d>(pts);

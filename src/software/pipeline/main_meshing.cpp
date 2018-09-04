@@ -241,8 +241,10 @@ int main(int argc, char* argv[])
                     ALICEVISION_LOG_INFO("Saving joined meshes...");
 
                     bfs::path spaceBinFileName = outDirectory/"denseReconstruction.bin";
+                    bfs::path spaceXYZFileName = outDirectory / "denseReconstruction.xyz";
+					//TODO@Yury get point cloud in correct format
                     mesh->saveToBin(spaceBinFileName.string());
-
+                    mesh->saveToXYZ(spaceXYZFileName.string());
                     // Export joined mesh to obj
                     mesh->saveToObj(outputMesh);
 
@@ -307,6 +309,7 @@ int main(int argc, char* argv[])
                     StaticVector<Point3d>* hexahsToExcludeFromResultingMesh = nullptr;
                     mesh::meshPostProcessing(mesh, ptsCams, usedCams, mp, pc, outDirectory.string()+"/", hexahsToExcludeFromResultingMesh, hexah);
                     mesh->saveToBin((outDirectory/"denseReconstruction.bin").string());
+                    mesh->saveToXYZ((outDirectory/"denseReconstruction.xyz").string());
 
                     saveArrayOfArraysToFile<int>((outDirectory/"meshPtsCamsFromDGC.bin").string(), ptsCams);
                     deleteArrayOfArrays<int>(&ptsCams);
@@ -366,13 +369,14 @@ int main(int argc, char* argv[])
                     mesh::Mesh* mesh = delaunayGC.createMesh();
                     if(mesh->pts->empty() || mesh->tris->empty())
                         throw std::runtime_error("Empty mesh");
-
+					// NOTE@Yury this path is used by the mechroom
                     StaticVector<StaticVector<int>*>* ptsCams = delaunayGC.createPtsCams();
                     StaticVector<int> usedCams = delaunayGC.getSortedUsedCams();
 
                     StaticVector<Point3d>* hexahsToExcludeFromResultingMesh = nullptr;
                     mesh::meshPostProcessing(mesh, ptsCams, usedCams, mp, pc, outDirectory.string()+"/", hexahsToExcludeFromResultingMesh, &hexah[0]);
                     mesh->saveToBin((outDirectory/"denseReconstruction.bin").string());
+                    mesh->saveToXYZ((outDirectory / "denseReconstruction.xyz").string());
 
                     saveArrayOfArraysToFile<int>((outDirectory/"meshPtsCamsFromDGC.bin").string(), ptsCams);
                     deleteArrayOfArrays<int>(&ptsCams);

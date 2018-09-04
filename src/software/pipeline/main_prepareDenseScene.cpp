@@ -374,6 +374,16 @@ int main(int argc, char *argv[])
     if(!fs::exists(outFolder))
       fs::create_directory(outFolder);
 
+
+     if(FILE* file = fopen(sfmDataFilename.c_str(), "r"))
+    {
+        fclose(file);
+        std::cout << "'" << sfmDataFilename << "'" <<std::endl;
+    }
+    else
+    {
+        std::cout << "Input files does no exist(note check white spaces): '" << sfmDataFilename.c_str() << "'" << std::endl;
+    }
     // Read the input SfM scene
     SfMData sfmData;
     if(!sfmDataIO::Load(sfmData, sfmDataFilename, sfmDataIO::ESfMData::ALL))
