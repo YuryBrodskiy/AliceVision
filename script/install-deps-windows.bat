@@ -10,9 +10,6 @@ set "VcPkgTriplet=x64-windows"
 if defined VCPKG_ROOT if /i not "%VCPKG_ROOT%"=="" set "VcPkgDir=%VCPKG_ROOT%"
 if defined VCPKG_DEFAULT_TRIPLET if /i not "%VCPKG_DEFAULT_TRIPLET%"=="" set "VcPkgTriplet=%VCPKG_DEFAULT_TRIPLET%"
 
-set g2o_patch="%cd%\g2o_version_update.patch"
-
-
 pushd %VcPkgDir%
 
 rem ==============================
@@ -37,3 +34,8 @@ call vcpkg install %VcPkgLibs% --recurse --triplet %VcPkgTriplet%
 popd
 
 endlocal & set "VcPkgDir=%VcPkgDir%" & set "VcPkgTriplet=%VcPkgTriplet%"
+
+rem ==============================
+rem Switch to crrect tool chain (auto detection of VS version would be nice)
+rem ==============================
+"C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\VC\Auxiliary\Build\vcvarsall.bat" x64 -vcvars_ver=14.0
