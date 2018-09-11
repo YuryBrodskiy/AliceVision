@@ -11,6 +11,8 @@ namespace aliceVision
 namespace depthMap
 {
 
+
+
 void doOnGPUs(mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams, GPUJob gpujob)
 {
     int num_gpus = listCUDADevices(true);

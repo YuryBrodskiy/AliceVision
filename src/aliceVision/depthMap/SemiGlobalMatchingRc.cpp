@@ -695,30 +695,16 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
     return true;
 }
 
-void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams)
-{
-    const int fileScale = 1; // input images scale (should be one)
-    int sgmScale = mp->_ini.get<int>("semiGlobalMatching.scale", -1);
-    int sgmStep = mp->_ini.get<int>("semiGlobalMatching.step", -1);
 
-    if(sgmScale == -1)
+void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
+                           const StaticVector<int>& cams)
     {
-        // Compute the number of scales that will be used in the plane sweeping.
-        // The highest scale should have a minimum resolution of 700x550.
-        int width = mp->getMaxImageWidth();
-        int height = mp->getMaxImageHeight();
-        int scaleTmp = computeStep(mp, fileScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
-        sgmScale = std::min(2, scaleTmp);
-        sgmStep = computeStep(mp, fileScale * sgmScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
-        ALICEVISION_LOG_INFO("PSSGM autoScaleStep: scale: " << sgmScale << ", step: " << sgmStep);
-    }
-
+    aliceVision::mvsUtils::SGMParams sgm(mp);
     const int bandType = 0;
-    
     // load images from files into RAM 
     mvsUtils::ImagesCache ic(mp, bandType, true);
     // load stuff on GPU memory and creates multi-level images and computes gradients
-    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgmScale, cams); // ToDo add cameras to load
+    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgm.scale, cams); // ToDo add cameras to load
     // init plane sweeping parameters
     SemiGlobalMatchingParams sp(mp, pc, &cps);
 
@@ -726,11 +712,11 @@ void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsU
 
     for(const int rc : cams)
     {
-        std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgmScale, sgmStep);
+        std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
         if(!mvsUtils::FileExists(depthMapFilepath))
         {
             ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
-            SemiGlobalMatchingRc psgr(true, rc, sgmScale, sgmStep, &sp);
+            SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
             psgr.sgmrc();
         }
         else
@@ -739,7 +725,6 @@ void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsU
         }
     }
 }
-
 
 } // namespace depthMap
 } // namespace aliceVision

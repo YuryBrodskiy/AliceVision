@@ -306,41 +306,32 @@ bool RefineRc::refinercCUDA(bool checkIfExists)
 
 void refineDepthMaps(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams)
 {
-    const int fileScale = 1; // input images scale (should be one)
-    int sgmScale = mp->_ini.get<int>("semiGlobalMatching.scale", -1);
-    int sgmStep = mp->_ini.get<int>("semiGlobalMatching.step", -1);
-
-    if(sgmScale == -1)
-    {
-        int width = mp->getMaxImageWidth();
-        int height = mp->getMaxImageHeight();
-
-        int scaleTmp = computeStep(mp, fileScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
-        sgmScale = std::min(2, scaleTmp);
-        sgmStep = computeStep(mp, fileScale * sgmScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
-        ALICEVISION_LOG_INFO("PSSGM autoScaleStep scale: " << sgmScale << ", step: " << sgmStep);
-    }
-
-    int bandType = 0;
-    mvsUtils::ImagesCache* ic = new mvsUtils::ImagesCache(mp, bandType, true);
-    PlaneSweepingCuda* cps = new PlaneSweepingCuda(CUDADeviceNo, ic, mp, pc, sgmScale, cams);
-    SemiGlobalMatchingParams* sp = new SemiGlobalMatchingParams(mp, pc, cps);
+   
+    aliceVision::mvsUtils::SGMParams sgm(mp);
+    const int bandType = 0;
+    // load images from files into RAM
+    mvsUtils::ImagesCache ic(mp, bandType, true);
+    // load stuff on GPU memory and creates multi-level images and computes gradients
+    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgm.scale, cams); // ToDo add cameras to load
+    // init plane sweeping parameters
+    SemiGlobalMatchingParams sp(mp, pc, &cps);
 
     //////////////////////////////////////////////////////////////////////////////////////////
 
     for(const int rc : cams)
     {
-        if(!mvsUtils::FileExists(sp->getREFINE_opt_simMapFileName(mp->getViewId(rc), 1, 1)))
+        std::string depthMapRefinedFilePath = sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+        if(!mvsUtils::FileExists(depthMapRefinedFilePath))
         {
-            RefineRc* rrc = new RefineRc(rc, sgmScale, sgmStep, sp);
-            rrc->refinercCUDA();
-            delete rrc;
+            ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
+            RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
+            rrc.refinercCUDA();
+		 }
+        else
+        {
+            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
         }
     }
-
-    delete sp;
-    delete ic;
-    delete cps;
 }
 
 
