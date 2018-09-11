@@ -7,6 +7,7 @@ set(depthMap_files_headers
   SemiGlobalMatchingRc.hpp
   SemiGlobalMatchingRcTc.hpp
   SemiGlobalMatchingVolume.hpp
+  MultiGPUAccessOptimization.hpp
 )
 
 # Sources
@@ -18,6 +19,7 @@ set(depthMap_files_sources
   SemiGlobalMatchingRc.cpp
   SemiGlobalMatchingRcTc.cpp
   SemiGlobalMatchingVolume.cpp
+  MultiGPUAccessOptimization.cpp
 )
 
 # Cuda Headers

@@ -55,7 +55,7 @@ protected:
     std::string SGM_idDepthMapFileName;
 };
 
-void computeDepthMapsPSSGM(mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams);
+
 void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams);
 
 } // namespace depthMap

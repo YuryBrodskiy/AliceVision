@@ -14,6 +14,7 @@
 #include <aliceVision/depthMap/RefineRc.hpp>
 #include <aliceVision/depthMap/SemiGlobalMatchingRc.hpp>
 #include <aliceVision/system/gpu.hpp>
+#include <aliceVision/depthMap/MultiGPUAccessOptimization.hpp>
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -212,10 +213,10 @@ int main(int argc, char* argv[])
 
     {
         system::Timer timerDepthMaps;
-        depthMap::computeDepthMapsPSSGM(&mp, &pc, cams);
+        depthMap::doOnGPUs(&mp, &pc, cams, depthMap::computeDepthMapsPSSGM);
         ALICEVISION_LOG_INFO("SGM has finished in : " + std::to_string(timerDepthMaps.elapsed()));
         system::Timer timerRefiner;
-        depthMap::refineDepthMaps(&mp, &pc, cams);
+        depthMap::doOnGPUs(&mp, &pc, cams, depthMap::refineDepthMaps);
         ALICEVISION_LOG_INFO("Refiner has finished in : " + std::to_string(timerRefiner.elapsed()));
     }
 
