@@ -668,8 +668,14 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
 
         imageIO::writeImage(SGM_idDepthMapFileName, volDimX, volDimY, volumeBestId);
 
-        if(sp->visualizeDepthMaps)
-            imageIO::writeImageScaledColors("visualize_" + SGM_idDepthMapFileName, volDimX, volDimY, 0, depths->size(), volumeBestId.data(), true);
+		if (sp->visualizeDepthMaps)
+        {
+            
+            std::string visualize_fn = sp->mp->getDepthMapFolder() + std::to_string(sp->mp->getViewId(rc)) + "_idDepthMap_scale" +
+                                       mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) +"_visualize" + "_SGM.png";
+            imageIO::writeImageScaledColors(visualize_fn, volDimX, volDimY, 0, depths->size(),volumeBestId.data(), true);
+		}
+            
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -712,7 +718,7 @@ void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsU
     // load images from files into RAM 
     mvsUtils::ImagesCache ic(mp, bandType, true);
     // load stuff on GPU memory and creates multi-level images and computes gradients
-    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgmScale);
+    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgmScale, cams); // ToDo add cameras to load
     // init plane sweeping parameters
     SemiGlobalMatchingParams sp(mp, pc, &cps);
 

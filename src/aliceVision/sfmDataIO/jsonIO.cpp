@@ -440,7 +440,10 @@ bool loadJSON(sfmData::SfMData& sfmData, const std::string& filename, ESfMData p
       int viewIndex = 0;
       for(bpt::ptree::value_type &viewNode : fileTree.get_child("views"))
       {
+         // TODO@Yury add path correction for relative paths viewTree.get<std::string>("path")
+          
         loadView(incompleteViews.at(viewIndex), viewNode.second);
+         // incompleteViews.at(viewIndex).setImagePath
         ++viewIndex;
       }
 

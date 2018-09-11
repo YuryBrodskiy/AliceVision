@@ -323,7 +323,7 @@ void refineDepthMaps(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::
 
     int bandType = 0;
     mvsUtils::ImagesCache* ic = new mvsUtils::ImagesCache(mp, bandType, true);
-    PlaneSweepingCuda* cps = new PlaneSweepingCuda(CUDADeviceNo, ic, mp, pc, sgmScale);
+    PlaneSweepingCuda* cps = new PlaneSweepingCuda(CUDADeviceNo, ic, mp, pc, sgmScale, cams);
     SemiGlobalMatchingParams* sp = new SemiGlobalMatchingParams(mp, pc, cps);
 
     //////////////////////////////////////////////////////////////////////////////////////////

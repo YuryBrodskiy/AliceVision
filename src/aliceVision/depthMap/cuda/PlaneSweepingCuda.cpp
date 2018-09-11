@@ -382,7 +382,7 @@ void cps_updateCamH(cameraStruct* cam, float** H)
 }
 
 PlaneSweepingCuda::PlaneSweepingCuda(int _CUDADeviceNo, mvsUtils::ImagesCache* _ic, mvsUtils::MultiViewParams* _mp,
-                                         mvsUtils::PreMatchCams* _pc, int _scales)
+                                         mvsUtils::PreMatchCams* _pc, int _scales,  StaticVector<int> _cams)
 {
     CUDADeviceNo = _CUDADeviceNo;
 
@@ -401,7 +401,7 @@ PlaneSweepingCuda::PlaneSweepingCuda(int _CUDADeviceNo, mvsUtils::ImagesCache* _
     {
         oneimagemb += 4.0 * (((float)((maxImageWidth / scale) * (maxImageHeight / scale)) / 1024.0) / 1024.0);
     }
-    float maxmbGPU = 100.0f;
+    float maxmbGPU = 4096.0f;
     nImgsInGPUAtTime = (int)(maxmbGPU / oneimagemb);
     nImgsInGPUAtTime = std::max(2, std::min(mp->ncams, nImgsInGPUAtTime));
 
@@ -427,8 +427,8 @@ PlaneSweepingCuda::PlaneSweepingCuda(int _CUDADeviceNo, mvsUtils::ImagesCache* _
     ps_deviceAllocate((CudaArray<uchar4, 2>***)&ps_texs_arr, nImgsInGPUAtTime, maxImageWidth, maxImageHeight, scales, CUDADeviceNo);
 
     cams = new StaticVector<void*>();
-    cams->reserve(nImgsInGPUAtTime);
-    cams->resize(nImgsInGPUAtTime);
+    
+    cams->resize(nImgsInGPUAtTime, NULL);
     camsRcs = new StaticVector<int>();
     camsRcs->reserve(nImgsInGPUAtTime);
     camsRcs->resize(nImgsInGPUAtTime);
@@ -436,7 +436,18 @@ PlaneSweepingCuda::PlaneSweepingCuda(int _CUDADeviceNo, mvsUtils::ImagesCache* _
     camsTimes->reserve(nImgsInGPUAtTime);
     camsTimes->resize(nImgsInGPUAtTime);
 
-    for(int rc = 0; rc < nImgsInGPUAtTime; ++rc)
+	int nnearestcams = mp->_ini.get<int>("semiGlobalMatching.maxTCams", 10);
+    StaticVector<int> camsToLoad;
+	for(int rc : _cams)
+    {
+        camsToLoad.push_back_distinct(rc);
+		StaticVector<int> ncams = pc->findNearestCamsFromSeeds(rc, nnearestcams);
+        for(int nc : ncams)
+            camsToLoad.push_back_distinct(nc);
+	}
+
+    //for(int rc = 0; rc < nImgsInGPUAtTime; ++rc)
+    for(int rc : camsToLoad)
     {
         (*cams)[rc] = new cameraStruct();
         ((cameraStruct*)(*cams)[rc])->tex_rgba_hmh =
@@ -496,12 +507,15 @@ PlaneSweepingCuda::~PlaneSweepingCuda(void)
 
     for(int c = 0; c < cams->size(); c++)
     {
-        delete((cameraStruct*)(*cams)[c])->tex_rgba_hmh;
-        if(((cameraStruct*)(*cams)[c])->H != NULL)
+        if((*cams)[c] != NULL)
         {
-            delete[]((cameraStruct*)(*cams)[c])->H;
+            delete((cameraStruct*)(*cams)[c])->tex_rgba_hmh;
+            if(((cameraStruct*)(*cams)[c])->H != NULL)
+            {
+                delete[]((cameraStruct*)(*cams)[c])->H;
+            }
+            delete((cameraStruct*)(*cams)[c]);
         }
-        delete((cameraStruct*)(*cams)[c]);
     }
     delete cams;
     delete camsRcs;

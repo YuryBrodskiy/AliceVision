@@ -211,8 +211,12 @@ int main(int argc, char* argv[])
     ALICEVISION_LOG_INFO("Create depth maps.");
 
     {
+        system::Timer timerDepthMaps;
         depthMap::computeDepthMapsPSSGM(&mp, &pc, cams);
+        ALICEVISION_LOG_INFO("SGM has finished in : " + std::to_string(timerDepthMaps.elapsed()));
+        system::Timer timerRefiner;
         depthMap::refineDepthMaps(&mp, &pc, cams);
+        ALICEVISION_LOG_INFO("Refiner has finished in : " + std::to_string(timerRefiner.elapsed()));
     }
 
     ALICEVISION_LOG_INFO("Task done in (s): " + std::to_string(timer.elapsed()));

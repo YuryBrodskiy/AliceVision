@@ -74,8 +74,7 @@ public:
     // float gammaC,gammaP;
     mvsUtils::ImagesCache* ic;
 
-    PlaneSweepingCuda(int _CUDADeviceNo, mvsUtils::ImagesCache* _ic, mvsUtils::MultiViewParams* _mp, mvsUtils::PreMatchCams* _pc,
-                        int _scales);
+    PlaneSweepingCuda(int _CUDADeviceNo, mvsUtils::ImagesCache* _ic, mvsUtils::MultiViewParams* _mp, mvsUtils::PreMatchCams* _pc, int _scales, StaticVector<int> cams);
     ~PlaneSweepingCuda(void);
 
     int addCam(int rc, float** H, int scale);
