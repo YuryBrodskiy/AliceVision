@@ -5,13 +5,59 @@
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 #include "MultiGPUAccessOptimization.hpp"
 #include "aliceVision/alicevision_omp.hpp"
+#include <aliceVision/mvsUtils/common.hpp>
+#include <aliceVision/depthMap/SemiGlobalMatchingRc.hpp>
+#include <aliceVision/depthMap/RefineRc.hpp>
+#include <aliceVision/mvsUtils/fileIO.hpp>
+
 
 namespace aliceVision
 {
 namespace depthMap
 {
 
+	void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
+                        const StaticVector<int>& cams)
+{
+        aliceVision::mvsUtils::SGMParams sgm(mp);
+        const int bandType = 0;
+        // load images from files into RAM
+        mvsUtils::ImagesCache ic(mp, bandType, true);
+        // load stuff on GPU memory and creates multi-level images and computes gradients
+        PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgm.scale, cams); // ToDo add cameras to load
+        // init plane sweeping parameters
+        SemiGlobalMatchingParams sp(mp, pc, &cps);
 
+        //////////////////////////////////////////////////////////////////////////////////////////
+
+        for(const int rc : cams)
+        {
+            std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+            if(!mvsUtils::FileExists(depthMapFilepath))
+            {
+                ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
+                SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
+                psgr.sgmrc();
+            }
+            else
+            {
+                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
+            }
+            std::string depthMapRefinedFilePath =
+                sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+            if(!mvsUtils::FileExists(depthMapRefinedFilePath))
+            {
+                ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
+                RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
+                rrc.refinercCUDA();
+            }
+            else
+            {
+                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
+            }
+        }
+
+    }
 
 void doOnGPUs(mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams, GPUJob gpujob)
 {

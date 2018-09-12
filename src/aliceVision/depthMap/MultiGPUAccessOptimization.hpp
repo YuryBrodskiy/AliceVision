@@ -12,14 +12,12 @@ namespace aliceVision
 {
 namespace depthMap
 {
-//
-//class GPUDepthWorker
-//{
-//    explicit
-//};
+
+void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
+                       const StaticVector<int>& cams);
 
 typedef void (*GPUJob)(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
-                                           const StaticVector<int>& cams);
+                       const StaticVector<int>& cams);
 
 void doOnGPUs(mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams, GPUJob gpujob);
 
