@@ -212,6 +212,10 @@ public:
       pitch = pitchDevPtr.pitch;
     }
   }
+    explicit CudaDeviceMemoryPitched(const CudaSize<Dim>& _size, Type val)
+    {
+         throw Exception("Not Implemented"); 
+    }
   ~CudaDeviceMemoryPitched()
   {
     cudaFree(buffer);

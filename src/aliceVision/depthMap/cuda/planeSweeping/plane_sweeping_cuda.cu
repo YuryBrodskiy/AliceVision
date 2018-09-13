@@ -12,7 +12,7 @@
 #include <aliceVision/depthMap/cuda/planeSweeping/device_code_refine.cu>
 #include <aliceVision/depthMap/cuda/planeSweeping/device_code_volume.cu>
 #include <aliceVision/depthMap/cuda/planeSweeping/device_code_fuse.cu>
-
+#include <time.h>
 #include <math_constants.h>
 
 #include <algorithm>
@@ -944,9 +944,31 @@ void ps_SGMAggregateVolumeDir(
         if (verbose) printf("aggregate volume gpu elapsed time: %f ms \n", toc(tall));
 };
 */
+template <>
+CudaDeviceMemoryPitched<unsigned char, 3>::CudaDeviceMemoryPitched(const CudaSize<3>& _size, unsigned char val)
+{
 
-void ps_computeSimilarityVolume(CudaArray<uchar4, 2>** ps_texs_arr,
-                                CudaDeviceMemoryPitched<unsigned char, 3>& vol_dmp, cameraStruct** cams, int ncams,
+    size = _size;
+    // sx = 1;
+    // sy = 1;
+    sz = 1;
+    // sx = _size[0]; // this is left as reminder  see non specialized template
+    sy = _size[1];
+    sx = _size[2];
+    cudaExtent extent;
+    extent.width = _size[0] * sizeof(unsigned char);
+    extent.height = _size[1];
+    extent.depth = _size[2];
+    cudaPitchedPtr pitchDevPtr;
+    cudaMalloc3D(&pitchDevPtr, extent);
+    cudaMemset3D(pitchDevPtr, 255, extent);
+    buffer = (unsigned char*)pitchDevPtr.ptr;
+    pitch = pitchDevPtr.pitch;
+}
+
+CudaDeviceMemoryPitched<unsigned char, 3>* 
+    ps_computeSimilarityVolume(CudaArray<uchar4, 2>**ps_texs_arr,
+                                 cameraStruct** cams, int ncams,
                                 int width, int height, int volStepXY, int volDimX, int volDimY, int volDimZ, int volLUX,
                                 int volLUY, int volLUZ, CudaHostMemoryHeap<int4, 2>& volPixs_hmh,
                                 CudaHostMemoryHeap<float, 2>& depths_hmh, int nDepthsToSearch, int slicesAtTime,
@@ -955,12 +977,21 @@ void ps_computeSimilarityVolume(CudaArray<uchar4, 2>** ps_texs_arr,
                                 int nbest, bool useTcOrRcPixSize, float gammaC, float gammaP, bool subPixel,
                                 float epipShift)
 {
-    clock_t tall = tic();
-    testCUDAdeviceNo(CUDAdeviceNo);
-
+	
+    clock_t clock_setup = tic();
+    CudaDeviceMemoryPitched<unsigned char, 3>* vol_dmp =
+        new CudaDeviceMemoryPitched<unsigned char, 3>(CudaSize<3>(volDimX, volDimY, volDimZ), 255);
     if(verbose)
+    {
+        pr_printfDeviceMemoryInfo();
+        printf("total size of volume map in GPU memory: %f\n", (float)(vol_dmp->getBytes()) / (1024.0f * 1024.0f));
+        testCUDAdeviceNo(CUDAdeviceNo);
         printf("nDepths %i, nDepthsToSearch %i \n", nDepths, nDepthsToSearch);
-    CudaArray<int4, 2> volPixs_arr(volPixs_hmh);
+        printf("ps_computeSimilarityVolume elapsed time: %f ms \n", toc(clock_setup));
+    }
+
+	clock_t tall = tic();
+	CudaArray<int4, 2> volPixs_arr(volPixs_hmh);
     CudaArray<float, 2> depths_arr(depths_hmh);
 
     cudaBindTextureToArray(volPixsTex, volPixs_arr.getArray(), cudaCreateChannelDesc<int4>());
@@ -983,17 +1014,30 @@ void ps_computeSimilarityVolume(CudaArray<uchar4, 2>** ps_texs_arr,
                                    cams[c]->C);
     cudaBindTextureToArray(t4tex, ps_texs_arr[cams[c]->camId * scales + scale]->getArray(),
                            cudaCreateChannelDesc<uchar4>());
-
+ 
     //--------------------------------------------------------------------------------------------------
-    // init similarity volume
-    for(int z = 0; z < volDimZ; z++)
-    {
-        volume_initVolume_kernel<unsigned char><<<gridvol, blockvol>>>(
-            vol_dmp.getBuffer(), vol_dmp.stride()[1], vol_dmp.stride()[0], volDimX, volDimY, volDimZ, z, 255);
-        cudaThreadSynchronize();
-    };
+    //// init similarity volume
+    //for(int z = 0; z < volDimZ; z++)
+    //{
+    //    volume_initVolume_kernel<unsigned char><<<gridvol, blockvol>>>(
+    //        vol_dmp.getBuffer(), vol_dmp.stride()[1], vol_dmp.stride()[0], volDimX, volDimY, volDimZ, z, 255);
+    //    cudaThreadSynchronize();
+    //};//@Yury could do cudaMemset unsigned char is byte so ...
+	//{
+ //       cudaExtent extent;
+ //       extent.width = volDimX * sizeof(unsigned char);
+ //       extent.height = volDimY;
+ //       extent.depth = volDimZ;
 
-    //--------------------------------------------------------------------------------------------------
+ //       cudaPitchedPtr pitchDevPtr;
+ //       cudaMalloc3D(&pitchDevPtr, extent);
+ //       cudaMemset3D(pitchDevPtr, 255, extent);
+ //       vol_dmp.buffer = (unsigned char*)pitchDevPtr.ptr;
+ //    
+	//}
+    cudaThreadSynchronize();
+    CHECK_CUDA_ERROR();
+    //---------------------------------------------------------------d-----------------------------------
     // compute similarity volume
     CudaDeviceMemoryPitched<unsigned char, 2> slice_dmp(CudaSize<2>(nDepthsToSearch, slicesAtTime));
     for(int t = 0; t < ntimes; t++)
@@ -1002,7 +1046,7 @@ void ps_computeSimilarityVolume(CudaArray<uchar4, 2>** ps_texs_arr,
                                              slicesAtTime, width, height, wsh, t, npixs, gammaC, gammaP, epipShift);
         cudaThreadSynchronize();
 
-        volume_saveSliceToVolume_kernel<<<grid, block>>>(vol_dmp.getBuffer(), vol_dmp.stride()[1], vol_dmp.stride()[0],
+        volume_saveSliceToVolume_kernel<<<grid, block>>>(vol_dmp->getBuffer(), vol_dmp->stride()[1], vol_dmp->stride()[0],
                                                          slice_dmp.getBuffer(), slice_dmp.stride()[0], nDepthsToSearch,
                                                          nDepths, slicesAtTime, width, height, t, npixs, volStepXY,
                                                          volDimX, volDimY, volDimZ, volLUX, volLUY, volLUZ);
@@ -1017,6 +1061,7 @@ void ps_computeSimilarityVolume(CudaArray<uchar4, 2>** ps_texs_arr,
 
     if(verbose)
         printf("ps_computeSimilarityVolume elapsed time: %f ms \n", toc(tall));
+    return vol_dmp;
 };
 
 float ps_planeSweepingGPUPixelsVolume(CudaArray<uchar4, 2>** ps_texs_arr,
@@ -1029,18 +1074,12 @@ float ps_planeSweepingGPUPixelsVolume(CudaArray<uchar4, 2>** ps_texs_arr,
                                       bool doUsePixelsDepths, int nbest, bool useTcOrRcPixSize, float gammaC,
                                       float gammaP, bool subPixel, float epipShift)
 {
-    testCUDAdeviceNo(CUDAdeviceNo);
 
-    CudaDeviceMemoryPitched<unsigned char, 3> volSim_dmp(CudaSize<3>(volDimX, volDimY, volDimZ));
-
-    if(verbose)
-        pr_printfDeviceMemoryInfo();
-    if(verbose)
-        printf("total size of volume map in GPU memory: %f\n", (float)volSim_dmp.getBytes() / (1024.0f * 1024.0f));
 
     //--------------------------------------------------------------------------------------------------
     // compute similarity volume
-    ps_computeSimilarityVolume(ps_texs_arr, volSim_dmp, cams, ncams, width, height, volStepXY, volDimX, volDimY,
+    CudaDeviceMemoryPitched<unsigned char, 3>* volSim_dmp =
+    ps_computeSimilarityVolume(ps_texs_arr, cams, ncams, width, height, volStepXY, volDimX, volDimY,
                                volDimZ, volLUX, volLUY, volLUZ, volPixs_hmh, depths_hmh, nDepthsToSearch, slicesAtTime,
                                ntimes, npixs, wsh, kernelSizeHalf, nDepths, scale, CUDAdeviceNo, ncamsAllocated, scales,
                                verbose, doUsePixelsDepths, nbest, useTcOrRcPixSize, gammaC, gammaP, subPixel, epipShift);
@@ -1048,12 +1087,13 @@ float ps_planeSweepingGPUPixelsVolume(CudaArray<uchar4, 2>** ps_texs_arr,
     //--------------------------------------------------------------------------------------------------
     // copy to host
     //copy((*ovol_hmh), volSim_dmp);
-    copy(ovol_hmh, volDimX, volDimY, volDimZ, volSim_dmp);
+    copy(ovol_hmh, volDimX, volDimY, volDimZ, *volSim_dmp);
 
     // pr_printfDeviceMemoryInfo();
     // printf("total size of volume map in GPU memory: %f\n",(float)d_volSim.getBytes()/(1024.0f*1024.0f));
-
-    return (float)volSim_dmp.getBytes() / (1024.0f * 1024.0f);
+    float sizeof_volSim_dmp = (float)volSim_dmp->getBytes() / (1024.0f * 1024.0f);
+    delete volSim_dmp;
+    return sizeof_volSim_dmp;
 }
 
 void ps_filterVisTVolume(CudaHostMemoryHeap<unsigned int, 3>* iovol_hmh, int volDimX, int volDimY, int volDimZ,
