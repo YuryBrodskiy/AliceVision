@@ -12,6 +12,9 @@
 #include <aliceVision/mvsUtils/MultiViewParams.hpp>
 #include <aliceVision/mvsUtils/PreMatchCams.hpp>
 #include <aliceVision/fuseCut/Fuser.hpp>
+#include <aliceVision/imageIO/image.hpp>
+#include <aliceVision/mvsUtils/fileIO.hpp>
+#include <aliceVision/mvsUtils/ImagesCache.hpp>
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -149,5 +152,62 @@ int main(int argc, char* argv[])
     }
 
     ALICEVISION_LOG_INFO("Task done in (s): " + std::to_string(timer.elapsed()));
+
+    ALICEVISION_LOG_INFO("Make Point Clouds");
+    system::Timer timer_PCL;
+    const int bandType = 0;
+    mvsUtils::ImagesCache imageCache(&mp, bandType, true);
+    for(int rc : cams)
+    {
+        imageCache.refreshData(rc);
+        std::string xyzFileName = mv_getFileNamePrefix(mp.getDepthMapFilterFolder(), &mp, rc) + "PCL.xyz";
+        FILE* f = fopen(xyzFileName.c_str(), "w");
+        int w = mp.getWidth(rc);
+        int h = mp.getHeight(rc);
+        StaticVector<float> depthMap;
+
+        {
+            int width, height;
+            imageIO::readImage(mv_getFileName(&mp, rc, mvsUtils::EFileType::depthMap, 0), width, height,
+                               depthMap.getDataWritable());
+
+            imageIO::transposeImage(width, height, depthMap.getDataWritable());
+        }
+
+        if((depthMap.empty()) || (depthMap.size() != w * h))
+        {
+            std::stringstream s;
+            s << "filterGroupsRC: bad image dimension for camera: " << mp.getViewId(rc) << "\n";
+            s << "depthMap size: " << depthMap.size() << ", width: " << w << ", height: " << h;
+            throw std::runtime_error(s.str());
+        }
+        else
+        {
+            for(int i = 0; i < sizeOfStaticVector<float>(&depthMap); i++)
+            {
+                int x = i / h;
+                int y = i % h;
+                float depth = depthMap[i];
+                if(depth > 0.0f) 
+                {
+                    //@Yury Raw point cloud ???
+                    Point3d p = mp.CArr[rc] + (mp.iCamArr[rc] * Point2d((float)x, (float)y)).normalize() * depth;
+                    Point2d pixRC;
+                    mp.getPixelFor3DPoint(&pixRC, p, rc);
+                    if(!mp.isPixelInImage(pixRC, rc))
+                    {
+                    }
+                    else
+                    {
+                        Color color = imageCache.getPixelValueInterpolated(&pixRC, rc);
+                        fprintf(f, "%f %f %f %f %f %f\n", p.x, p.y, p.z, color.r * 255, color.g * 255, color.b * 255);
+                    }
+                }
+            }
+        }
+        fclose(f);
+    }
+
+    ALICEVISION_LOG_INFO("Save points to xyz done in (s): " + std::to_string(timer.elapsed()));
     return EXIT_SUCCESS;
 }

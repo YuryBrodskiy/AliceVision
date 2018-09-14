@@ -442,21 +442,7 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
                 }
             }
         }
-        {
-            long t = std::clock();
-            ALICEVISION_LOG_DEBUG("Save points to xyz.");
-            // printf("open\n");
-            bfs::path coloredPointCloudPath = outPath / "coloredPCD.xyz";
-            FILE* f = fopen(coloredPointCloudPath.string().c_str(), "wb");
 
-            for(int i = 0; i < coloredPointCloud.size(); i++)
-                fprintf(f, "%f %f %f %f %f %f\n", coloredPointCloud[i]._point.x, coloredPointCloud[i]._point.y,
-                        coloredPointCloud[i]._point.z, coloredPointCloud[i]._color.r * 255,
-                        coloredPointCloud[i]._color.g * 255, coloredPointCloud[i]._color.b * 255);
-            fclose(f);
-            // printf("done\n");
-            mvsUtils::printfElapsedTime(t, "Save points to xyz ");
-        }
             // end Color point cloud generation
 
         #pragma omp parallel for
@@ -535,6 +521,21 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
         camId++;
     }
     camTriangles.clear();
+    {
+        long t = std::clock();
+        ALICEVISION_LOG_DEBUG("Save points to xyz.");
+        // printf("open\n");
+        bfs::path coloredPointCloudPath = outPath / "coloredPCD.xyz";
+        FILE* f = fopen(coloredPointCloudPath.string().c_str(), "w");
+
+        for(int i = 0; i < coloredPointCloud.size(); i++)
+            fprintf(f, "%f %f %f %f %f %f\n", coloredPointCloud[i]._point.x, coloredPointCloud[i]._point.y,
+                    coloredPointCloud[i]._point.z, coloredPointCloud[i]._color.r * 255,
+                    coloredPointCloud[i]._color.g * 255, coloredPointCloud[i]._color.b * 255);
+        fclose(f);
+        // printf("done\n");
+        mvsUtils::printfElapsedTime(t, "Save points to xyz ");
+    }
 
     if(!texParams.fillHoles && texParams.padding > 0)
     {

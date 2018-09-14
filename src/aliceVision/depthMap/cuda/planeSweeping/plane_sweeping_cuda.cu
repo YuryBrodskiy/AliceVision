@@ -981,6 +981,8 @@ CudaDeviceMemoryPitched<unsigned char, 3>*
     clock_t clock_setup = tic();
     CudaDeviceMemoryPitched<unsigned char, 3>* vol_dmp =
         new CudaDeviceMemoryPitched<unsigned char, 3>(CudaSize<3>(volDimX, volDimY, volDimZ), 255);
+    cudaThreadSynchronize(); //Is it needed???
+    CHECK_CUDA_ERROR();
     if(verbose)
     {
         pr_printfDeviceMemoryInfo();
@@ -1035,8 +1037,7 @@ CudaDeviceMemoryPitched<unsigned char, 3>*
  //       vol_dmp.buffer = (unsigned char*)pitchDevPtr.ptr;
  //    
 	//}
-    cudaThreadSynchronize();
-    CHECK_CUDA_ERROR();
+
     //---------------------------------------------------------------d-----------------------------------
     // compute similarity volume
     CudaDeviceMemoryPitched<unsigned char, 2> slice_dmp(CudaSize<2>(nDepthsToSearch, slicesAtTime));
