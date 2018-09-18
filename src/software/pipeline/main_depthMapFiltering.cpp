@@ -156,7 +156,9 @@ int main(int argc, char* argv[])
     ALICEVISION_LOG_INFO("Make Point Clouds");
     system::Timer timer_PCL;
     const int bandType = 0;
-    mvsUtils::ImagesCache imageCache(&mp, bandType, true);
+    //  quick fix of size inconsistency
+    mvsUtils::MultiViewParams mp1(iniFilepath, outputFolder, "", false, 4);
+    mvsUtils::ImagesCache imageCache(&mp1, bandType, true);
     for(int rc : cams)
     {
         imageCache.refreshData(rc);
