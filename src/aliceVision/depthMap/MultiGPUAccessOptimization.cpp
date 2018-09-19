@@ -9,55 +9,99 @@
 #include <aliceVision/depthMap/SemiGlobalMatchingRc.hpp>
 #include <aliceVision/depthMap/RefineRc.hpp>
 #include <aliceVision/mvsUtils/fileIO.hpp>
-
+#include <aliceVision/imageIO/image.hpp>
 
 namespace aliceVision
 {
 namespace depthMap
 {
-
-	void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
-                        const StaticVector<int>& cams)
+void savePointCloudXYZ(mvsUtils::ImagesCache& imageCache, int rc, mvsUtils::MultiViewParams* mp)
 {
-        aliceVision::mvsUtils::SGMParams sgm(mp);
-        const int bandType = 0;
-        // load images from files into RAM
-        mvsUtils::ImagesCache ic(mp, bandType, true);
-        // load stuff on GPU memory and creates multi-level images and computes gradients
-        PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgm.scale, cams); // ToDo add cameras to load
-        // init plane sweeping parameters
-        SemiGlobalMatchingParams sp(mp, pc, &cps);
+    imageCache.refreshData(rc);
+    std::string xyzFileName = mv_getFileNamePrefix(mp->getDepthMapFolder(), mp, rc) + "PCL.xyz";
+    FILE* f = fopen(xyzFileName.c_str(), "w");
+    int w = mp->getWidth(rc);
+    int h = mp->getHeight(rc);
+    StaticVector<float> depthMap;
 
-        //////////////////////////////////////////////////////////////////////////////////////////
+    {
+        int width, height;
+        imageIO::readImage(mv_getFileName(mp, rc, mvsUtils::EFileType::depthMap, 1), width, height, depthMap.getDataWritable());
+		imageIO::transposeImage(width, height, depthMap.getDataWritable());
+    }
 
-        for(const int rc : cams)
+    if((depthMap.empty()) || (depthMap.size() != w * h))
+    {
+        std::stringstream s;
+        s << "filterGroupsRC: bad image dimension for camera: " << mp->getViewId(rc) << "\n";
+        s << "depthMap size: " << depthMap.size() << ", width: " << w << ", height: " << h;
+        throw std::runtime_error(s.str());
+    }
+    else
+    {
+        for(int i = 0; i < sizeOfStaticVector<float>(&depthMap); i++)
         {
-            std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-            if(!mvsUtils::FileExists(depthMapFilepath))
+            int x = i / h;
+            int y = i % h;
+            float depth = depthMap[i];
+            if(depth > 0.0f)
             {
-                ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
-                SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
-                psgr.sgmrc();
-            }
-            else
-            {
-                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
-            }
-            std::string depthMapRefinedFilePath =
-                sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-            if(!mvsUtils::FileExists(depthMapRefinedFilePath))
-            {
-                ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
-                RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
-                rrc.refinercCUDA();
-            }
-            else
-            {
-                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
+                Point3d p = mp->CArr[rc] + (mp->iCamArr[rc] * Point2d((float)x, (float)y)).normalize() * depth;
+                Point2d pixRC;
+                mp->getPixelFor3DPoint(&pixRC, p, rc);
+                if(mp->isPixelInImage(pixRC, rc))
+                {
+                    Color color = imageCache.getPixelValueInterpolated(&pixRC, rc);
+                    fprintf(f, "%f %f %f %f %f %f\n", p.x, p.y, p.z, color.r * 255, color.g * 255, color.b * 255);
+                }
             }
         }
-
     }
+    fclose(f);
+}
+
+
+void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams)
+{
+    aliceVision::mvsUtils::SGMParams sgm(mp);
+    const int bandType = 0;
+    // load images from files into RAM
+    mvsUtils::ImagesCache ic(mp, bandType, true);
+    // load stuff on GPU memory and creates multi-level images and computes gradients
+    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgm.scale, cams); // ToDo add cameras to load
+    // init plane sweeping parameters
+    SemiGlobalMatchingParams sp(mp, pc, &cps);
+
+    //////////////////////////////////////////////////////////////////////////////////////////
+
+    for(const int rc : cams)
+    {
+        std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+        if(!mvsUtils::FileExists(depthMapFilepath))
+        {
+            ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
+            SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
+            psgr.sgmrc();
+        }
+        else
+        {
+            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
+        }
+        std::string depthMapRefinedFilePath = sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+        if(!mvsUtils::FileExists(depthMapRefinedFilePath))
+        {
+            ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
+            RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
+            rrc.refinercCUDA();
+        }
+        else
+        {
+            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
+        }
+
+        depthMap::savePointCloudXYZ(ic, rc, mp);
+    }
+}
 
 void doOnGPUs(mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams, GPUJob gpujob)
 {
