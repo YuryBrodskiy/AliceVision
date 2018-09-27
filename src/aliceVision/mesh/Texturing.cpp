@@ -22,7 +22,7 @@
 #include <geogram/parameterization/mesh_atlas_maker.h>
 
 #include <boost/algorithm/string/case_conv.hpp> 
-
+#include <fstream>
 #include <map>
 #include <set>
 
@@ -755,8 +755,45 @@ void Texturing::unwrap(mvsUtils::MultiViewParams& mp, EUnwrapMethod method)
     }
 }
 
-void Texturing::saveAsOBJ(const bfs::path& dir, const std::string& basename, EImageFileType textureFileType)
+void Texturing::saveAsOBJ(const bfs::path& dir, const std::string& basename, EImageFileType textureFileType,
+                          const std::string* const geoOffsetFileName)
+
 {
+    std::vector<double> geoOffset(16, 0.0);
+    geoOffset[0] = 1.0;
+    geoOffset[5] = 1.0;
+    geoOffset[10] = 1.0;
+    geoOffset[15] = 1.0;
+    
+	if(geoOffsetFileName!=NULL)
+    {
+		ALICEVISION_LOG_INFO("Reading geo offset file.");
+        std::ifstream geoOffsetFile;
+
+        geoOffsetFile.open(*geoOffsetFileName);
+        if(!geoOffsetFile)
+        {
+            ALICEVISION_LOG_INFO("Unable to open file");
+		}
+		else
+		{
+            int i = 0;
+            double a;
+            while(geoOffsetFile >> a)
+            {
+                geoOffset[i] = a;
+                i++;
+            }
+		}
+        geoOffsetFile.close();
+		//TODO@Yury  the obj has o be local this has to fixed
+        geoOffset[3] = 0;
+        geoOffset[7] = 0;
+        geoOffset[11] = 0;
+
+	}
+    
+	
     ALICEVISION_LOG_INFO("Writing obj and mtl file.");
 
     std::string objFilename = (dir / (basename + ".obj")).string();
@@ -770,7 +807,16 @@ void Texturing::saveAsOBJ(const bfs::path& dir, const std::string& basename, EIm
     fprintf(fobj, "# \n");
     fprintf(fobj, "# Wavefront OBJ file\n");
     fprintf(fobj, "# Created with AliceVision\n");
-    fprintf(fobj, "# \n");
+    fprintf(fobj, "# \n# \n\n\n");
+    
+
+    for(int i = 0; i < 4; ++i)
+    {
+        fprintf(fobj, "#EIVAt %f %f %f %f\n", geoOffset[i * 4 + 0], geoOffset[i * 4 + 1], geoOffset[i * 4 + 2],
+                geoOffset[i * 4 + 3]);
+    }
+    fprintf(fobj, "# \n# \n\n\n");
+
     fprintf(fobj, "mtllib %s\n\n", mtlName.c_str());
     fprintf(fobj, "g TexturedMesh\n");
 

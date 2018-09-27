@@ -41,6 +41,7 @@ int main(int argc, char* argv[])
     std::string inputDenseReconstruction;
     std::string inputMeshFilepath;
     std::string outputFolder;
+    std::string geoOffset;
     std::string outTextureFileTypeName = EImageFileType_enumToString(EImageFileType::PNG);
     bool flipNormals = false;
     mesh::TexturingParams texParams;
@@ -91,7 +92,9 @@ int main(int argc, char* argv[])
             "Method to remap visibilities from the reconstruction to the input mesh.\n"
             " * Pull: For each vertex of the input mesh, pull the visibilities from the closest vertex in the reconstruction.\n"
             " * Push: For each vertex of the reconstruction, push the visibilities to the closest triangle in the input mesh.\n"
-            " * PullPush: Combine results from Pull and Push results.'");
+            " * PullPush: Combine results from Pull and Push results.'")
+			("geoOffset", po::value<std::string>(&geoOffset)->default_value(""),
+			"To_global file used to correct obj location");
 
     po::options_description logParams("Log parameters");
     logParams.add_options()
@@ -139,7 +142,7 @@ int main(int argc, char* argv[])
 
     // .ini and files parsing
     mvsUtils::MultiViewParams mp(iniFilepath);
-
+    
     mesh::Texturing mesh;
     mesh.texParams = texParams;
 
@@ -163,7 +166,7 @@ int main(int argc, char* argv[])
     }
 
     // save final obj file
-    mesh.saveAsOBJ(outputFolder, "texturedMesh", outputTextureFileType);
+    mesh.saveAsOBJ(outputFolder, "texturedMesh", outputTextureFileType, &geoOffset);
 
     // generate textures
     ALICEVISION_LOG_INFO("Generate textures.");
