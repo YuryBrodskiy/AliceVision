@@ -92,21 +92,10 @@ StaticVector<float>* SemiGlobalMatchingRc::getTcSeedsRcPlaneDists(int rc, Static
 {
     OrientedPoint rcplane;
     rcplane.p = sp->mp->CArr[rc];
-    rcplane.n = sp->mp->iRArr[rc] * Point3d(0.0, 0.0, 1.0);
-    rcplane.n = rcplane.n.normalize();
-
-    int nTcSeeds = 0;
-    for(int c = 0; c < tcams->size(); c++)
-    {
-        StaticVector<SeedPoint>* seeds;
-        mvsUtils::loadSeedsFromFile(&seeds, (*tcams)[c], sp->mp, mvsUtils::EFileType::seeds);
-        nTcSeeds += seeds->size();
-        delete seeds;
-    } // for c
-
+    rcplane.n = (sp->mp->iRArr[rc] * Point3d(0.0, 0.0, 1.0)).normalize();
+    
     StaticVector<float>* rcDists = new StaticVector<float>();
-    rcDists->reserve(nTcSeeds);
-
+   
     for(int c = 0; c < tcams->size(); c++)
     {
         StaticVector<SeedPoint>* seeds;

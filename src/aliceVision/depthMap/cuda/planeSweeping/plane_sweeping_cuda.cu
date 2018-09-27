@@ -1045,7 +1045,7 @@ CudaDeviceMemoryPitched<unsigned char, 3>*
     {
         volume_slice_kernel<<<grid, block>>>(slice_dmp.getBuffer(), slice_dmp.stride()[0], nDepthsToSearch, nDepths,
                                              slicesAtTime, width, height, wsh, t, npixs, gammaC, gammaP, epipShift);
-        cudaThreadSynchronize();
+        //cudaThreadSynchronize(); //uncomment this if you see CUDA problems here
 
         volume_saveSliceToVolume_kernel<<<grid, block>>>(vol_dmp->getBuffer(), vol_dmp->stride()[1], vol_dmp->stride()[0],
                                                          slice_dmp.getBuffer(), slice_dmp.stride()[0], nDepthsToSearch,
@@ -1054,7 +1054,7 @@ CudaDeviceMemoryPitched<unsigned char, 3>*
         cudaThreadSynchronize();
         CHECK_CUDA_ERROR();
     };
-
+    
     cudaUnbindTexture(r4tex);
     cudaUnbindTexture(t4tex);
     cudaUnbindTexture(volPixsTex);
