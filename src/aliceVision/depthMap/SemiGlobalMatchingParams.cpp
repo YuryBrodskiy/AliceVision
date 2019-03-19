@@ -18,60 +18,53 @@ namespace depthMap {
 
 namespace bfs = boost::filesystem;
 
-SemiGlobalMatchingParams::SemiGlobalMatchingParams(mvsUtils::MultiViewParams* _mp, mvsUtils::PreMatchCams* _pc, PlaneSweepingCuda* _cps)
+SemiGlobalMatchingParams::SemiGlobalMatchingParams(mvsUtils::MultiViewParams* _mp, PlaneSweepingCuda& _cps)
+    : cps( _cps )
 {
     mp = _mp;
-    pc = _pc;
-    cps = _cps;
     prt = new RcTc(mp, cps);
 
-    visualizeDepthMaps = mp->_ini.get<bool>("semiGlobalMatching.visualizeDepthMaps", false);
-    visualizePartialDepthMaps =
-        mp->_ini.get<bool>("semiGlobalMatching.visualizePartialDepthMaps", false);
+    exportIntermediateResults = mp->userParams.get<bool>("depthMap.intermediateResults", false);
+    doSmooth = mp->userParams.get<bool>("semiGlobalMatching.smooth", true);
+    doRefine = mp->userParams.get<bool>("semiGlobalMatching.doRefine", true);
+    refineUseTcOrPixSize = mp->userParams.get<bool>("semiGlobalMatching.refineUseTcOrPixSize", true);
 
-    doSmooth = mp->_ini.get<bool>("semiGlobalMatching.smooth", true);
+    ndepthsToRefine = mp->userParams.get<int>("semiGlobalMatching.ndepthsToRefine", 15);
 
+    P1 = (unsigned char)mp->userParams.get<int>("semiGlobalMatching.P1", 10);
+    P2 = (unsigned char)mp->userParams.get<int>("semiGlobalMatching.P2", 125);
+    P3 = (unsigned char)mp->userParams.get<int>("semiGlobalMatching.P3", 0);
 
-    doRefine = mp->_ini.get<bool>("semiGlobalMatching.doRefine", true);
-    refineUseTcOrPixSize = mp->_ini.get<bool>("semiGlobalMatching.refineUseTcOrPixSize", true);
+    maxDepthsToStore = mp->userParams.get<int>("semiGlobalMatching.maxDepthsToStore", 3000);
+    maxDepthsToSweep = mp->userParams.get<int>("semiGlobalMatching.maxDepthsToSweep", 1500);
+    rcTcDepthsHalfLimit = mp->userParams.get<int>("semiGlobalMatching.rcTcDepthsHalfLimit", 2048);
 
-    ndepthsToRefine = mp->_ini.get<int>("semiGlobalMatching.ndepthsToRefine", 15);
-
-    P1 = (unsigned char)mp->_ini.get<int>("semiGlobalMatching.P1", 10);
-    P2 = (unsigned char)mp->_ini.get<int>("semiGlobalMatching.P2", 125);
-    P3 = (unsigned char)mp->_ini.get<int>("semiGlobalMatching.P3", 0);
-
-    maxDepthsToStore = mp->_ini.get<int>("semiGlobalMatching.maxDepthsToStore", 3000);
-    maxDepthsToSweep = mp->_ini.get<int>("semiGlobalMatching.maxDepthsToSweep", 1500);
-    rcTcDepthsHalfLimit = mp->_ini.get<int>("semiGlobalMatching.rcTcDepthsHalfLimit", 2048);
-
-    rcDepthsCompStep = mp->_ini.get<int>("semiGlobalMatching.rcDepthsCompStep", 6);
+    rcDepthsCompStep = mp->userParams.get<int>("semiGlobalMatching.rcDepthsCompStep", 6);
 
     useSeedsToCompDepthsToSweep =
-        mp->_ini.get<bool>("semiGlobalMatching.useSeedsToCompDepthsToSweep", true);
-    seedsRangePercentile = (float)mp->_ini.get<double>("semiGlobalMatching.seedsRangePercentile", 0.001);
-    seedsRangeInflate = (float)mp->_ini.get<double>("semiGlobalMatching.seedsRangeInflate", 0.2);
+        mp->userParams.get<bool>("semiGlobalMatching.useSeedsToCompDepthsToSweep", true);
+    seedsRangePercentile = (float)mp->userParams.get<double>("semiGlobalMatching.seedsRangePercentile", 0.999);
+    seedsRangeInflate = (float)mp->userParams.get<double>("semiGlobalMatching.seedsRangeInflate", 0.2);
 
     saveDepthsToSweepToTxtForVis =
-        mp->_ini.get<bool>("semiGlobalMatching.saveDepthsToSweepToTxtForVis", false);
+        mp->userParams.get<bool>("semiGlobalMatching.saveDepthsToSweepToTxtForVis", false);
 
-    doSGMoptimizeVolume = mp->_ini.get<bool>("semiGlobalMatching.doSGMoptimizeVolume", true);
-    doRefineRc = mp->_ini.get<bool>("semiGlobalMatching.doRefineRc", true);
+    doSGMoptimizeVolume = mp->userParams.get<bool>("semiGlobalMatching.doSGMoptimizeVolume", true);
+    doRefineRc = mp->userParams.get<bool>("semiGlobalMatching.doRefineRc", true);
 
-    modalsMapDistLimit = mp->_ini.get<int>("semiGlobalMatching.modalsMapDistLimit", 2);
-    minNumOfConsistentCams = mp->_ini.get<int>("semiGlobalMatching.minNumOfConsistentCams", 2);
-    minObjectThickness = mp->_ini.get<int>("semiGlobalMatching.minObjectThickness", 8);
+    modalsMapDistLimit = mp->userParams.get<int>("semiGlobalMatching.modalsMapDistLimit", 2);
+    minNumOfConsistentCams = mp->userParams.get<int>("semiGlobalMatching.minNumOfConsistentCams", 2);
     maxTcRcPixSizeInVoxRatio =
-        (float)mp->_ini.get<double>("semiGlobalMatching.maxTcRcPixSizeInVoxRatio", 2.0f);
-    nSGGCIters = mp->_ini.get<int>("semiGlobalMatching.nSGGCIters", 0);
+        (float)mp->userParams.get<double>("semiGlobalMatching.maxTcRcPixSizeInVoxRatio", 2.0f);
+    nSGGCIters = mp->userParams.get<int>("semiGlobalMatching.nSGGCIters", 0);
 
-    SGMoutDirName = mp->_ini.get<std::string>("semiGlobalMatching.outDirName", "SGM");
-    SGMtmpDirName = mp->_ini.get<std::string>("semiGlobalMatching.tmpDirName", "_tmp");
+    SGMoutDirName = mp->userParams.get<std::string>("semiGlobalMatching.outDirName", "SGM");
+    SGMtmpDirName = mp->userParams.get<std::string>("semiGlobalMatching.tmpDirName", "_tmp");
 
-    useSilhouetteMaskCodedByColor = mp->_ini.get<bool>("global.useSilhouetteMaskCodedByColor", false);
-    silhouetteMaskColor.r = mp->_ini.get<int>("global.silhouetteMaskColorR", 0);
-    silhouetteMaskColor.g = mp->_ini.get<int>("global.silhouetteMaskColorG", 0);
-    silhouetteMaskColor.b = mp->_ini.get<int>("global.silhouetteMaskColorB", 0);
+    useSilhouetteMaskCodedByColor = mp->userParams.get<bool>("global.useSilhouetteMaskCodedByColor", false);
+    silhouetteMaskColor.r = mp->userParams.get<int>("global.silhouetteMaskColorR", 0);
+    silhouetteMaskColor.g = mp->userParams.get<int>("global.silhouetteMaskColorG", 0);
+    silhouetteMaskColor.b = mp->userParams.get<int>("global.silhouetteMaskColorB", 0);
 }
 
 SemiGlobalMatchingParams::~SemiGlobalMatchingParams()
@@ -81,52 +74,52 @@ SemiGlobalMatchingParams::~SemiGlobalMatchingParams()
 
 std::string SemiGlobalMatchingParams::getREFINE_photo_depthMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_depthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refinePhoto.exr";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_depthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refinePhoto.exr";
 }
 
 std::string SemiGlobalMatchingParams::getREFINE_photo_simMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_simMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refinePhoto.exr";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_simMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refinePhoto.exr";
 }
 
 std::string SemiGlobalMatchingParams::getREFINE_opt_depthMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_depthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refineOpt.exr";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_depthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refineOpt.exr";
 }
 
 std::string SemiGlobalMatchingParams::getREFINE_opt_simMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_simMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refineOpt.exr";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_simMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_refineOpt.exr";
 }
 
 std::string SemiGlobalMatchingParams::getSGMTmpDir()
 {
-    return mp->getDepthMapFolder() + SGMoutDirName + "/" + SGMtmpDirName + "/";
+    return mp->getDepthMapsFolder() + SGMoutDirName + "/" + SGMtmpDirName + "/";
 }
 
 std::string SemiGlobalMatchingParams::getSGM_depthMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_depthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_SGM.bin";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_depthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_SGM.bin";
 }
 
 std::string SemiGlobalMatchingParams::getSGM_simMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_simMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_SGM.bin";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_simMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_SGM.bin";
 }
 
 std::string SemiGlobalMatchingParams::getSGM_idDepthMapFileName(IndexT viewId, int scale, int step)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_idDepthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_SGM.png";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_idDepthMap_scale" + mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) + "_SGM.png";
 }
 
 std::string SemiGlobalMatchingParams::getSGM_tcamsFileName(IndexT viewId)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_tcams.bin";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_tcams.bin";
 }
 
 std::string SemiGlobalMatchingParams::getSGM_depthsFileName(IndexT viewId)
 {
-    return mp->getDepthMapFolder() + std::to_string(viewId) + "_depths.bin";
+    return mp->getDepthMapsFolder() + std::to_string(viewId) + "_depths.bin";
 }
 
 DepthSimMap* SemiGlobalMatchingParams::getDepthSimMapFromBestIdVal(int w, int h, StaticVector<IdValue>* volumeBestIdVal,

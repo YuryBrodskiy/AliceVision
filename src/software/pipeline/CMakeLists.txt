@@ -25,6 +25,7 @@ if(ALICEVISION_BUILD_SFM)
     SOURCE main_featureExtraction.cpp
     FOLDER ${FOLDER_SOFTWARE_PIPELINE}
     LINKS aliceVision_system
+          aliceVision_gpu
           aliceVision_image
           aliceVision_feature
           aliceVision_multiview
@@ -33,11 +34,6 @@ if(ALICEVISION_BUILD_SFM)
           vlsift
           ${Boost_LIBRARIES}
   )
-
-  if(ALICEVISION_HAVE_CCTAG)
-    target_link_libraries(aliceVision_featureExtraction PUBLIC CCTag::CCTag)
-  endif()
-
 
   # Image matching
   # - generate the image pair lists
@@ -97,19 +93,6 @@ if(ALICEVISION_BUILD_SFM)
     SOURCE main_computeStructureFromKnownPoses.cpp
     FOLDER ${FOLDER_SOFTWARE_PIPELINE}
     LINKS aliceVision_system
-          aliceVision_feature
-          aliceVision_sfm
-          aliceVision_sfmData
-          aliceVision_sfmDataIO
-          ${Boost_LIBRARIES}
-  )
-
-  # Compute structure color
-  alicevision_add_software(aliceVision_computeSfMColor
-    SOURCE main_computeSfMColor.cpp
-    FOLDER ${FOLDER_SOFTWARE_PIPELINE}
-    LINKS aliceVision_system
-          aliceVision_image
           aliceVision_feature
           aliceVision_sfm
           aliceVision_sfmData
@@ -197,52 +180,35 @@ endif() # if(ALICEVISION_BUILD_SFM)
 ### MVS software
 if(ALICEVISION_BUILD_MVS)
 
-  # Compute Nearby Cameras
-  alicevision_add_software(aliceVision_cameraConnection
-    SOURCE main_cameraConnection.cpp
-    FOLDER ${FOLDER_SOFTWARE_PIPELINE}
-    LINKS aliceVision_system
-          aliceVision_mvsUtils
-          ${Boost_LIBRARIES}
-  )
-
-  # Depth Map Estimation
   if(ALICEVISION_HAVE_CUDA) # Depth map computation need CUDA
+    # Depth Map Estimation
     alicevision_add_software(aliceVision_depthMapEstimation
       SOURCE main_depthMapEstimation.cpp
       FOLDER ${FOLDER_SOFTWARE_PIPELINE}
       LINKS aliceVision_system
+            aliceVision_gpu
             aliceVision_mvsData
             aliceVision_mvsUtils
             aliceVision_depthMap
+            aliceVision_sfmData
+            aliceVision_sfmDataIO
             ${Boost_LIBRARIES}
     )
-  endif()
 
-    # Depth Map Estimation and Filtering parallelized using CUDA contexts
-  if(ALICEVISION_HAVE_CUDA) # Depth map computation need CUDA
-    alicevision_add_software(aliceVision_depthMapFull
-      SOURCE main_depthMapFull.cpp
+    # Depth Map Filtering
+    alicevision_add_software(aliceVision_depthMapFiltering
+      SOURCE main_depthMapFiltering.cpp
       FOLDER ${FOLDER_SOFTWARE_PIPELINE}
       LINKS aliceVision_system
             aliceVision_mvsData
             aliceVision_mvsUtils
+            aliceVision_fuseCut
             aliceVision_depthMap
-			aliceVision_fuseCut
+            aliceVision_sfmData
+            aliceVision_sfmDataIO
             ${Boost_LIBRARIES}
     )
   endif()
-
-  # Depth Map Filtering
-  alicevision_add_software(aliceVision_depthMapFiltering
-    SOURCE main_depthMapFiltering.cpp
-    FOLDER ${FOLDER_SOFTWARE_PIPELINE}
-    LINKS aliceVision_system
-          aliceVision_mvsData
-          aliceVision_mvsUtils
-          aliceVision_fuseCut
-          ${Boost_LIBRARIES}
-  )
 
   # Meshing
   alicevision_add_software(aliceVision_meshing
@@ -253,6 +219,8 @@ if(ALICEVISION_BUILD_MVS)
           aliceVision_mvsUtils
           aliceVision_mesh
           aliceVision_fuseCut
+          aliceVision_sfmData
+          aliceVision_sfmDataIO
           ${Boost_LIBRARIES}
   )
 
@@ -308,6 +276,8 @@ if(ALICEVISION_BUILD_MVS)
           aliceVision_mvsData
           aliceVision_mvsUtils
           aliceVision_mesh
+          aliceVision_sfmData
+          aliceVision_sfmDataIO
           ${Boost_LIBRARIES}
   )
 endif() # if(ALICEVISION_BUILD_MVS)

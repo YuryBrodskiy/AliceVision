@@ -6,7 +6,8 @@
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "ImageDescriber_CCTAG.hpp"
-#include <aliceVision/system/gpu.hpp>
+#include <aliceVision/gpu/gpu.hpp>
+#include <aliceVision/system/Logger.hpp>
 
 #include <cctag/ICCTag.hpp>
 #include <cctag/utils/LogTime.hpp>
@@ -21,8 +22,8 @@ namespace feature {
 ImageDescriber_CCTAG::CCTagParameters::CCTagParameters(size_t nRings)
   : _internalParams(new cctag::Parameters(nRings))
 {
-#ifdef WITH_CUDA // CCTAG_WITH_CUDA
-  _internalParams->_useCuda = system::gpuSupportCUDA(3,5);
+#ifdef CCTAG_WITH_CUDA // CCTAG_WITH_CUDA
+  _internalParams->_useCuda = gpu::gpuSupportCUDA(3,5);
 #else
   _internalParams->_useCuda = false;
 #endif

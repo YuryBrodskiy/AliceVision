@@ -6,11 +6,12 @@
 
 #include "SemiGlobalMatchingRc.hpp"
 #include <aliceVision/system/Logger.hpp>
+#include <aliceVision/gpu/gpu.hpp>
+
 #include <aliceVision/depthMap/SemiGlobalMatchingRcTc.hpp>
 #include <aliceVision/depthMap/SemiGlobalMatchingVolume.hpp>
 #include <aliceVision/mvsData/OrientedPoint.hpp>
 #include <aliceVision/mvsData/Point3d.hpp>
-#include <aliceVision/mvsData/SeedPoint.hpp>
 #include <aliceVision/mvsUtils/common.hpp>
 #include <aliceVision/mvsUtils/fileIO.hpp>
 #include <aliceVision/imageIO/image.hpp>
@@ -26,192 +27,107 @@ namespace depthMap {
 
 namespace bfs = boost::filesystem;
 
-SemiGlobalMatchingRc::SemiGlobalMatchingRc(bool doComputeDepthsAndResetTCams, int _rc, int _scale, int _step, SemiGlobalMatchingParams* _sp)
+SemiGlobalMatchingRc::SemiGlobalMatchingRc(int rc, int scale, int step, SemiGlobalMatchingParams* sp)
+    : _rc(rc)
+    , _scale(scale)
+    , _step(step)
+    , _sp(sp)
 {
-    sp = _sp;
+    const int nbNearestCams = sp->mp->userParams.get<int>("semiGlobalMatching.maxTCams", 10);
+    _width  = sp->mp->getWidth(rc)  / (scale * step);
+    _height = sp->mp->getHeight(rc) / (scale * step);
+    _sgmTCams  = sp->mp->findNearestCamsFromLandmarks(rc, nbNearestCams);
+    _sgmWsh = sp->mp->userParams.get<int>("semiGlobalMatching.wsh", 4);
+    _sgmGammaC = static_cast<float>(sp->mp->userParams.get<double>("semiGlobalMatching.gammaC", 5.5));
+    _sgmGammaP = static_cast<float>(sp->mp->userParams.get<double>("semiGlobalMatching.gammaP", 8.0));
+    _depthsTcamsLimits.clear();
 
-    rc = _rc;
-    scale = _scale;
-    step = _step;
-
-    w = sp->mp->getWidth(rc) / (scale * step);
-    h = sp->mp->getHeight(rc) / (scale * step);
-
-    int nnearestcams = sp->mp->_ini.get<int>("semiGlobalMatching.maxTCams", 10);
-    tcams = new StaticVector<int>();
-    *tcams = sp->pc->findNearestCamsFromSeeds(rc, nnearestcams);
-
-    wsh = sp->mp->_ini.get<int>("semiGlobalMatching.wsh", 4);
-    gammaC = (float)sp->mp->_ini.get<double>("semiGlobalMatching.gammaC", 5.5);
-    gammaP = (float)sp->mp->_ini.get<double>("semiGlobalMatching.gammaP", 8.0);
-
-    sp->cps->verbose = sp->mp->verbose;
-
-    const IndexT viewId = sp->mp->getViewId(rc);
-
-    tcamsFileName = sp->getSGM_tcamsFileName(viewId);
-    depthsFileName = sp->getSGM_depthsFileName(viewId);
-    depthsTcamsLimitsFileName =  sp->mp->getDepthMapFolder() + std::to_string(viewId) + "_depthsTcamsLimits.bin";
-    SGM_depthMapFileName = sp->getSGM_depthMapFileName(viewId, scale, step);
-    SGM_simMapFileName = sp->getSGM_simMapFileName(viewId, scale, step);
-    SGM_idDepthMapFileName = sp->getSGM_idDepthMapFileName(viewId, scale, step);
-
-    depths = nullptr;
-    depthsTcamsLimits = nullptr;
-
-    if(doComputeDepthsAndResetTCams)
-    {
-        computeDepthsAndResetTCams();
-    }
-    else
-    {
-        delete tcams;
-        tcams = nullptr;
-        depths = nullptr;
-        depthsTcamsLimits = nullptr;
-        if(mvsUtils::FileExists(tcamsFileName) && mvsUtils::FileExists(depthsFileName) && mvsUtils::FileExists(depthsTcamsLimitsFileName))
-        {
-            tcams = loadArrayFromFile<int>(tcamsFileName, true);
-            depths = loadArrayFromFile<float>(depthsFileName);
-            depthsTcamsLimits = loadArrayFromFile<Pixel>(depthsTcamsLimitsFileName);
-        }
-    }
+    computeDepthsAndResetTCams();
 }
 
 SemiGlobalMatchingRc::~SemiGlobalMatchingRc()
 {
-    delete tcams;
-    delete depths;
-    delete depthsTcamsLimits;
-}
-
-/**
- * @brief Depths of all seeds (regarding the camera plane and not the camera center).
- */
-StaticVector<float>* SemiGlobalMatchingRc::getTcSeedsRcPlaneDists(int rc, StaticVector<int>* tcams)
-{
-    OrientedPoint rcplane;
-    rcplane.p = sp->mp->CArr[rc];
-    rcplane.n = (sp->mp->iRArr[rc] * Point3d(0.0, 0.0, 1.0)).normalize();
-    
-    StaticVector<float>* rcDists = new StaticVector<float>();
-   
-    for(int c = 0; c < tcams->size(); c++)
-    {
-        StaticVector<SeedPoint>* seeds;
-        mvsUtils::loadSeedsFromFile(&seeds, (*tcams)[c], sp->mp, mvsUtils::EFileType::seeds);
-        for(int i = 0; i < seeds->size(); i++)
-        {
-            rcDists->push_back(pointPlaneDistance((*seeds)[i].op.p, rcplane.p, rcplane.n));
-        }
-        delete seeds;
-    } // for c
-
-    return rcDists;
+    delete _volumeBestIdVal;
+    delete _depths;
 }
 
 bool SemiGlobalMatchingRc::selectBestDepthsRange(int nDepthsThr, StaticVector<float>* rcSeedsDistsAsc)
 {
-    if(depths->size() <= nDepthsThr)
-    {
+    if(_depths->size() <= nDepthsThr)
         return true;
-    }
 
-    StaticVector<int>* votes = new StaticVector<int>();
-    votes->reserve(depths->size() - nDepthsThr);
-    for(int i = 0; i < depths->size() - nDepthsThr; i++)
+    StaticVector<int> votes;
+    votes.reserve(_depths->size() - nDepthsThr);
+    for(int i = 0; i < _depths->size() - nDepthsThr; i++)
     {
-        float d1 = (*depths)[i];
-        float d2 = (*depths)[i + nDepthsThr - 1];
+        const float d1 = (*_depths)[i];
+        const float d2 = (*_depths)[i + nDepthsThr - 1];
+
         int id1 = rcSeedsDistsAsc->indexOfNearestSorted(d1);
-        if(d1 < (*rcSeedsDistsAsc)[0])
-        {
-            id1 = 0;
-        }
         int id2 = rcSeedsDistsAsc->indexOfNearestSorted(d2);
+
+        if(d1 < (*rcSeedsDistsAsc)[0])
+            id1 = 0;
+
         if(d2 > (*rcSeedsDistsAsc)[rcSeedsDistsAsc->size() - 1])
-        {
             id2 = rcSeedsDistsAsc->size() - 1;
-        }
 
         if((id1 > -1) && (id2 > -1))
-        {
-            votes->push_back(abs(id2 - id1));
-        }
+            votes.push_back(abs(id2 - id1));
         else
-        {
-            votes->push_back(0);
-        }
+            votes.push_back(0);
     }
 
-    StaticVector<float>* depthsNew = new StaticVector<float>();
+    StaticVector<float>* depthsNew;
     depthsNew->reserve(nDepthsThr);
 
-    int id1 = votes->maxValId();
-    int id2 = id1 + nDepthsThr - 1;
-
-    // printf("id1 %i, id2 %i\n",id1,id2);
+    const int id1 = votes.maxValId();
+    const int id2 = id1 + nDepthsThr - 1;
 
     for(int i = id1; i <= id2; i++)
-    {
-        depthsNew->push_back((*depths)[i]);
-    }
+        depthsNew->push_back((*_depths)[i]);
 
-    delete votes;
-
-    delete depths;
-    depths = depthsNew;
-
+    std::swap(_depths, depthsNew);
+    delete depthsNew;
     return true;
 }
 
 bool SemiGlobalMatchingRc::selectBestDepthsRange(int nDepthsThr, StaticVector<StaticVector<float>*>* alldepths)
 {
-    if(depths->size() <= nDepthsThr)
-    {
+    if(_depths->size() <= nDepthsThr)
         return true;
-    }
 
-    StaticVector<float>* votes = new StaticVector<float>();
-    votes->reserve(depths->size() - nDepthsThr);
+    StaticVector<float> votes;
+    votes.reserve(_depths->size() - nDepthsThr);
 
-    for(int i = 0; i < depths->size() - nDepthsThr; i++)
+    for(int i = 0; i < _depths->size() - nDepthsThr; i++)
     {
-        float d1 = (*depths)[i];
-        float d2 = (*depths)[i + nDepthsThr - 1];
-
+        const float d1 = (*_depths)[i];
+        const float d2 = (*_depths)[i + nDepthsThr - 1];
         float overlap = 0.0f;
+
         for(int c = 0; c < alldepths->size(); c++)
         {
-            StaticVector<float>* tcDepths = (*alldepths)[c];
-            float dd1 = std::max(d1, (*tcDepths)[0]);
-            float dd2 = std::min(d2, (*tcDepths)[tcDepths->size() - 1]);
+            const StaticVector<float>* tcDepths = (*alldepths)[c];
+            const float dd1 = std::max(d1, (*tcDepths)[0]);
+            const float dd2 = std::min(d2, (*tcDepths)[tcDepths->size() - 1]);
             if(dd1 < dd2)
-            {
                 overlap += dd2 - dd1;
-            }
         }
-        votes->push_back(overlap);
+        votes.push_back(overlap);
     }
 
-    StaticVector<float>* depthsNew = new StaticVector<float>();
+    StaticVector<float>* depthsNew;
     depthsNew->reserve(nDepthsThr);
 
-    int id1 = votes->maxValId();
-    int id2 = id1 + nDepthsThr - 1;
-
-    // printf("id1 %i, id2 %i\n",id1,id2);
+    const int id1 = votes.maxValId();
+    const int id2 = id1 + nDepthsThr - 1;
 
     for(int i = id1; i <= id2; i++)
-    {
-        depthsNew->push_back((*depths)[i]);
-    }
+        depthsNew->push_back((*_depths)[i]);
 
-    delete votes;
-
-    delete depths;
-    depths = depthsNew;
-
+    std::swap(_depths, depthsNew);
+    delete depthsNew;
     return true;
 }
 
@@ -220,30 +136,27 @@ float SemiGlobalMatchingRc::getMinTcStepAtDepth(float depth, float minDepth, flo
 {
     float minTcStep = maxDepth - minDepth;
 
-    // For each tc depths
+    // for each tc depths
     for(int i = 0; i < alldepths->size(); i++)
     {
         StaticVector<float>* tcDepths = (*alldepths)[i];
-        // Get the tc depth closest to the current depth
-        int id = tcDepths->indexOfNearestSorted(depth);
-        // Continue on no result or last element (we need id + 1)
+
+        // get the tc depth closest to the current depth
+        const int id = tcDepths->indexOfNearestSorted(depth);
+
+        // continue on no result or last element (we need id + 1)
         if(id < 0 || id >= tcDepths->size() - 1)
             continue;
 
-        // Consider the enclosing depth range 
-        float did = (*tcDepths)[id];     // closest depth
-        float nid = (*tcDepths)[id + 1]; // next depth
-        float tcStep = fabs(did - nid);  // [closest; next] depths distance
+        // consider the enclosing depth range
+        const float did = (*tcDepths)[id];     // closest depth
+        const float nid = (*tcDepths)[id + 1]; // next depth
+        const float tcStep = fabs(did - nid);  // [closest; next] depths distance
+
         // keep this value if smallest step so far
         minTcStep = std::min(minTcStep, tcStep);
-
-        // WARNING useless, 'id' is < tcDepths->size() - 1
-        /*if(depth >= (*tcDepths)[tcDepths->size() - 1])
-        {
-            printf("WARNING %i %i %f %f %f %f\n", id, tcDepths->size(), did, nid, depth,
-                    (*tcDepths)[tcDepths->size() - 1]);
-        }*/
     }
+
     return minTcStep;
 }
 
@@ -259,42 +172,29 @@ void SemiGlobalMatchingRc::computeDepths(float minDepth, float maxDepth, StaticV
         }
     }
 
-    depths = new StaticVector<float>();
-    depths->reserve(maxNdetphs);
+    _depths = new StaticVector<float>();
+    _depths->reserve(maxNdetphs);
 
     {
         float depth = minDepth;
         while(depth < maxDepth)
         {
-            depths->push_back(depth);
+            _depths->push_back(depth);
             depth += getMinTcStepAtDepth(depth, minDepth, maxDepth, alldepths);
         }
     }
 }
 
-/**
- * @brief Compute depths of the principal ray of reference camera rc visible by a pixel in a target camera tc
- *        providing meaningful 3d information.
- */
-StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndResetTCams()
+StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndResetTCams(float midDepth)
 {
-    /*
-    for (int c=0;c<tcams->size();c++) {
-            printf("%i %i\n",c,(*tcams)[c]);
-    };
-    */
-
-    StaticVector<int>* tcamsNew = new StaticVector<int>();
+    StaticVector<int> tcamsNew;
     StaticVector<StaticVector<float>*>* alldepths = new StaticVector<StaticVector<float>*>();
-    tcamsNew->reserve(tcams->size());
-    alldepths->reserve(tcams->size());
+    alldepths->reserve(_sgmTCams.size());
 
-    float midDepth = getCGDepthFromSeeds(sp->mp, rc);
-
-    for(int c = 0; c < tcams->size(); c++)
+    for(int c = 0; c < _sgmTCams.size(); c++)
     {
         // depths of all meaningful points on the principal ray of the reference camera regarding the target camera tc
-        StaticVector<float>* tcdepths = sp->cps->getDepthsRcTc(rc, (*tcams)[c], scale, midDepth, sp->rcTcDepthsHalfLimit);
+        StaticVector<float>* tcdepths = _sp->cps.getDepthsRcTc(_rc, _sgmTCams[c], _scale, midDepth, _sp->rcTcDepthsHalfLimit);
         if(sizeOfStaticVector<float>(tcdepths) < 50)
         {
             // fallback if we don't have enough valid samples over the epipolar line
@@ -304,8 +204,8 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
                 tcdepths = nullptr;
             }
             float avMinDist, avMidDist, avMaxDist;
-            sp->cps->getMinMaxdepths(rc, tcams, avMinDist, avMidDist, avMaxDist);
-            tcdepths = sp->cps->getDepthsByPixelSize(rc, avMinDist, avMidDist, avMaxDist, scale, sp->rcDepthsCompStep);
+            _sp->cps.getMinMaxdepths(_rc, _sgmTCams, avMinDist, avMidDist, avMaxDist);
+            tcdepths = _sp->cps.getDepthsByPixelSize(_rc, avMinDist, avMidDist, avMaxDist, _scale, _sp->rcDepthsCompStep);
 
             if(sizeOfStaticVector<float>(tcdepths) < 50)
             {
@@ -320,54 +220,52 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
         if(tcdepths != nullptr)
         {
             alldepths->push_back(tcdepths);
-            tcamsNew->push_back((*tcams)[c]);
+            tcamsNew.push_back(_sgmTCams[c]);
         }
     }
 
-    delete tcams;
-    tcams = tcamsNew;
-
-    /*
-    for (int c=0;c<tcams->size();c++) {
-            printf("%i %i\n",c,(*tcams)[c]);
-    };
-    */
+    _sgmTCams = tcamsNew;
 
     return alldepths;
 }
 
-/**
- * @ brief Fill depthsTcamsLimits member variable with index range of depths to sweep
- */
 void SemiGlobalMatchingRc::computeDepthsTcamsLimits(StaticVector<StaticVector<float>*>* alldepths)
 {
-    depthsTcamsLimits = new StaticVector<Pixel>();
-    depthsTcamsLimits->reserve(tcams->size());
+    _depthsTcamsLimits.resize(_sgmTCams.size());
 
-    for(int c = 0; c < tcams->size(); c++)
+    for(int c = 0; c < _sgmTCams.size(); c++)
     {
-        float d1 = (*(*alldepths)[c])[0];
-        float d2 = (*(*alldepths)[c])[(*alldepths)[c]->size() - 1];
-        int id1 = depths->indexOfNearestSorted(d1);
+        const float d1 = (*(*alldepths)[c])[0];
+        const float d2 = (*(*alldepths)[c])[(*alldepths)[c]->size() - 1];
+
+        int id1 = _depths->indexOfNearestSorted(d1);
+        int id2 = _depths->indexOfNearestSorted(d2);
+
         if(id1 == -1)
-        {
             id1 = 0;
-        }
-        int id2 = depths->indexOfNearestSorted(d2);
+
         if(id2 == -1)
-        {
-            id2 = depths->size() - 1;
-        }
+            id2 = _depths->size() - 1;
+
         // clamp to keep only the closest depths if we have too much inputs (> maxDepthsToSweep)
-        id2 = std::min(id1 + sp->maxDepthsToSweep - 1, id2);
-        depthsTcamsLimits->push_back(Pixel(id1, id2 - id1 + 1));
+        id2 = std::min(id1 + _sp->maxDepthsToSweep - 1, id2);
+        _depthsTcamsLimits[c] = Pixel(id1, id2 - id1 + 1);
     }
 }
 
 void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
 {
+    std::size_t nbObsDepths;
+    float minObsDepth, maxObsDepth, midObsDepth;
+    _sp->mp->getMinMaxMidNbDepth(_rc, minObsDepth, maxObsDepth, midObsDepth, nbObsDepths, _sp->seedsRangePercentile);
+
+    StaticVector<StaticVector<float>*>* alldepths;
+
     // all depths from the principal ray provided by target cameras
-    StaticVector<StaticVector<float>*>* alldepths = computeAllDepthsAndResetTCams();
+    if(nbObsDepths < 20)
+      alldepths = computeAllDepthsAndResetTCams(-1);
+    else
+      alldepths = computeAllDepthsAndResetTCams(midObsDepth);
 
     float minDepthAll = std::numeric_limits<float>::max();
     float maxDepthAll = 0.0f;
@@ -381,38 +279,32 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
         }
     }
 
-    if(!sp->useSeedsToCompDepthsToSweep)
+    if(!_sp->useSeedsToCompDepthsToSweep)
     {
         computeDepths(minDepthAll, maxDepthAll, alldepths);
-        if(sp->saveDepthsToSweepToTxtForVis)
+        if(_sp->saveDepthsToSweepToTxtForVis)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
+            std::string fn = _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "depthsAll.txt";
             FILE* f = fopen(fn.c_str(), "w");
-            for(int j = 0; j < depths->size(); j++)
+            for(int j = 0; j < _depths->size(); j++)
             {
-                float depth = (*depths)[j];
+                float depth = (*_depths)[j];
                 fprintf(f, "%f\n", depth);
             }
             fclose(f);
         }
-        selectBestDepthsRange(sp->maxDepthsToStore, alldepths);
+        selectBestDepthsRange(_sp->maxDepthsToStore, alldepths);
     }
     else
     {
-        StaticVector<float>* rcSeedsDistsAsc = getTcSeedsRcPlaneDists(rc, tcams);
         float minDepth = minDepthAll;
         float maxDepth = maxDepthAll;
 
-        // If we get enough information from seeds, adjust min/maxDepth
-        if(rcSeedsDistsAsc->size() > 100)
+        // if we get enough information from seeds, adjust min/maxDepth
+        if(nbObsDepths > 100)
         {
-            qsort(&(*rcSeedsDistsAsc)[0], rcSeedsDistsAsc->size(), sizeof(float), qSortCompareFloatAsc);
-
-            minDepth = (*rcSeedsDistsAsc)[(int)(float)rcSeedsDistsAsc->size() * (sp->seedsRangePercentile)] *
-                (1.0f - sp->seedsRangeInflate);
-            
-            maxDepth = (*rcSeedsDistsAsc)[(int)(float)rcSeedsDistsAsc->size() * (1.0f - sp->seedsRangePercentile)] *
-                             (1.0f + sp->seedsRangeInflate);
+            minDepth = minObsDepth * (1.0f - _sp->seedsRangeInflate);
+            maxDepth = maxObsDepth * (1.0f + _sp->seedsRangeInflate);
 
             if(maxDepthAll < minDepth || minDepthAll > maxDepth)
             {
@@ -427,72 +319,58 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
             }
         }
 
-        // Build the list of "best" depths for rc, from all tc cameras depths
+        // build the list of "best" depths for rc, from all tc cameras depths
         computeDepths(minDepth, maxDepth, alldepths);
 
-        if(sp->saveDepthsToSweepToTxtForVis)
+        if(_sp->saveDepthsToSweepToTxtForVis)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
+            std::string fn = _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "depthsAll.txt";
             FILE* f = fopen(fn.c_str(), "w");
-            for(int j = 0; j < depths->size(); j++)
+            for(int j = 0; j < _depths->size(); j++)
             {
-                float depth = (*depths)[j];
+                float depth = (*_depths)[j];
                 fprintf(f, "%f\n", depth);
             }
             fclose(f);
         }
 
-        // Filter out depths if computeDepths gave too many values
-        selectBestDepthsRange(sp->maxDepthsToStore, alldepths);
-
-        if(sp->saveDepthsToSweepToTxtForVis)
-        {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "rcSeedsDists.txt";
-            FILE* f = fopen(fn.c_str(), "w");
-            for(int j = 0; j < rcSeedsDistsAsc->size(); j++)
-            {
-                float depth = (*rcSeedsDistsAsc)[j];
-                fprintf(f, "%f\n", depth);
-            }
-            fclose(f);
-        }
-
-        delete rcSeedsDistsAsc;
+        // filter out depths if computeDepths gave too many values
+        selectBestDepthsRange(_sp->maxDepthsToStore, alldepths);
     }
 
     // fill depthsTcamsLimits member variable with index range of depths to sweep
     computeDepthsTcamsLimits(alldepths);
 
-    if(sp->saveDepthsToSweepToTxtForVis)
+    if(_sp->saveDepthsToSweepToTxtForVis)
     {
-        std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsTcamsLimits.txt";
+        std::string fn = _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "depthsTcamsLimits.txt";
         FILE* f = fopen(fn.c_str(), "w");
-        for(int j = 0; j < depthsTcamsLimits->size(); j++)
+        for(int j = 0; j < _depthsTcamsLimits.size(); j++)
         {
-            Pixel l = (*depthsTcamsLimits)[j];
+            Pixel l = _depthsTcamsLimits[j];
             // fprintf(f,"%f %f\n",(*depths)[l.x],(*depths)[l.x+l.y-1]);
             fprintf(f, "%i %i\n", l.x, l.y);
         }
         fclose(f);
     }
 
-    if(sp->saveDepthsToSweepToTxtForVis)
+    if(_sp->saveDepthsToSweepToTxtForVis)
     {
-        std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depths.txt";
+        std::string fn = _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "depths.txt";
         FILE* f = fopen(fn.c_str(), "w");
-        for(int j = 0; j < depths->size(); j++)
+        for(int j = 0; j < _depths->size(); j++)
         {
-            float depth = (*depths)[j];
+            float depth = (*_depths)[j];
             fprintf(f, "%f\n", depth);
         }
         fclose(f);
     }
 
-    if(sp->saveDepthsToSweepToTxtForVis)
+    if(_sp->saveDepthsToSweepToTxtForVis)
     {
         for(int i = 0; i < alldepths->size(); i++)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depths" + mvsUtils::num2str(i) + ".txt";
+            std::string fn = _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "depths" + mvsUtils::num2str(i) + ".txt";
             FILE* f = fopen(fn.c_str(), "w");
             for(int j = 0; j < (*alldepths)[i]->size(); j++)
             {
@@ -503,216 +381,159 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
         }
     }
 
-    if(sp->saveDepthsToSweepToTxtForVis)
+    if(_sp->saveDepthsToSweepToTxtForVis)
     {
         OrientedPoint rcplane;
-        rcplane.p = sp->mp->CArr[rc];
-        rcplane.n = sp->mp->iRArr[rc] * Point3d(0.0, 0.0, 1.0);
+        rcplane.p = _sp->mp->CArr[_rc];
+        rcplane.n = _sp->mp->iRArr[_rc] * Point3d(0.0, 0.0, 1.0);
         rcplane.n = rcplane.n.normalize();
 
-        std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "rcDepths.txt";
+        std::string fn = _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "rcDepths.txt";
         FILE* f = fopen(fn.c_str(), "w");
         float depth = minDepthAll;
         while(depth < maxDepthAll)
         {
             fprintf(f, "%f\n", depth);
             Point3d p = rcplane.p + rcplane.n * depth;
-            depth = depth + sp->mp->getCamPixelSize(p, rc);
+            depth = depth + _sp->mp->getCamPixelSize(p, _rc);
         }
         fclose(f);
     }
 
-    if(sp->mp->verbose)
-        ALICEVISION_LOG_DEBUG("rc depths: " << depths->size());
+    if(_sp->mp->verbose)
+        ALICEVISION_LOG_DEBUG("rc depths: " << _depths->size());
 
     deleteArrayOfArrays<float>(&alldepths);
 }
 
-StaticVector<float>* SemiGlobalMatchingRc::getSubDepthsForTCam(int tcamid)
+void SemiGlobalMatchingRc::getSubDepthsForTCam( int tcamid, std::vector<float>& out )
 {
-    StaticVector<float>* out = new StaticVector<float>();
-    out->reserve((*depthsTcamsLimits)[tcamid].y);
+    out.resize(_depthsTcamsLimits[tcamid].y);
 
-    for(int i = (*depthsTcamsLimits)[tcamid].x; i < (*depthsTcamsLimits)[tcamid].x + (*depthsTcamsLimits)[tcamid].y;
-        i++)
+    for(int i = 0; i<_depthsTcamsLimits[tcamid].y; i++ )
     {
-        out->push_back((*depths)[i]);
+        out[i] = (*_depths)[_depthsTcamsLimits[tcamid].x + i];
     }
-
-    return out;
 }
 
 bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
 {
-    if(sp->mp->verbose)
-        ALICEVISION_LOG_DEBUG("sgmrc: processing " << (rc + 1) << " of " << sp->mp->ncams << ".");
+    if(_sp->mp->verbose)
+      ALICEVISION_LOG_DEBUG("SGM (rc: " << (_rc + 1) << " / " << _sp->mp->ncams << ")");
 
-    if(tcams->size() == 0)
+    if(_sgmTCams.size() == 0)
     {
-        return false;
+      return false;
     }
 
-    if((mvsUtils::FileExists(SGM_idDepthMapFileName)) && (checkIfExists))
+    if((mvsUtils::FileExists(_sp->getSGM_idDepthMapFileName(_sp->mp->getViewId(_rc), _scale, _step))) && (checkIfExists))
     {
-        return false;
+      ALICEVISION_LOG_INFO("Already computed: " + _sp->getSGM_idDepthMapFileName(_sp->mp->getViewId(_rc), _scale, _step));
+      return false;
     }
 
     long tall = clock();
 
-    int volDimX = w;
-    int volDimY = h;
-    int volDimZ = depths->size();
+    const int volDimX = _width;
+    const int volDimY = _height;
+    const int volDimZ = _depths->size();
     float volumeMBinGPUMem = 0.0f;
 
     StaticVector<unsigned char>* simVolume = nullptr;
 
     StaticVectorBool* rcSilhoueteMap = nullptr;
-    if(sp->useSilhouetteMaskCodedByColor)
+    if(_sp->useSilhouetteMaskCodedByColor)
     {
         rcSilhoueteMap = new StaticVectorBool();
-        rcSilhoueteMap->reserve(w * h);
-        rcSilhoueteMap->resize_with(w * h, true);
-        sp->cps->getSilhoueteMap(rcSilhoueteMap, scale, step, sp->silhouetteMaskColor, rc);
+        rcSilhoueteMap->reserve(_width * _height);
+        rcSilhoueteMap->resize_with(_width * _height, true);
+        _sp->cps.getSilhoueteMap(rcSilhoueteMap, _scale, _step, _sp->silhouetteMaskColor, _rc);
     }
 
     {
-        StaticVector<float>* subDepths = getSubDepthsForTCam(0);
-        SemiGlobalMatchingRcTc srt(subDepths, rc, (*tcams)[0], scale, step, sp, rcSilhoueteMap);
-        simVolume = srt.computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
-        delete subDepths;
+        std::vector<float> subDepths;
+        getSubDepthsForTCam(0, subDepths);
+        SemiGlobalMatchingRcTc srt(subDepths, _rc, _sgmTCams[0], _scale, _step, _sp, rcSilhoueteMap);
+        simVolume = srt.computeDepthSimMapVolume(volumeMBinGPUMem, _sgmWsh, _sgmGammaC, _sgmGammaP);
     }
 
     // recompute to all depths
-    volumeMBinGPUMem = ((volumeMBinGPUMem / (float)(*depthsTcamsLimits)[0].y) * (float)volDimZ);
+    volumeMBinGPUMem = ((volumeMBinGPUMem / (float)_depthsTcamsLimits[0].y) * (float)volDimZ);
 
-    SemiGlobalMatchingVolume* svol = new SemiGlobalMatchingVolume(volumeMBinGPUMem, volDimX, volDimY, volDimZ, sp);
-    svol->copyVolume(simVolume, (*depthsTcamsLimits)[0].x, (*depthsTcamsLimits)[0].y);
+    SemiGlobalMatchingVolume* svol = new SemiGlobalMatchingVolume(volumeMBinGPUMem, volDimX, volDimY, volDimZ, _sp);
+    svol->copyVolume(simVolume, _depthsTcamsLimits[0].x, _depthsTcamsLimits[0].y);
     delete simVolume;
 
-    for(int c = 1; c < tcams->size(); c++)
+    for(int c = 1; c < _sgmTCams.size(); c++)
     {
-        StaticVector<float>* subDepths = getSubDepthsForTCam(c);
-        SemiGlobalMatchingRcTc* srt = new SemiGlobalMatchingRcTc(subDepths, rc, (*tcams)[c], scale, step, sp, rcSilhoueteMap);
-        simVolume = srt->computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
+        std::vector<float> subDepths;
+        getSubDepthsForTCam(c, subDepths);
+        SemiGlobalMatchingRcTc* srt = new SemiGlobalMatchingRcTc(subDepths, _rc, _sgmTCams[c], _scale, _step, _sp, rcSilhoueteMap);
+        simVolume = srt->computeDepthSimMapVolume(volumeMBinGPUMem, _sgmWsh, _sgmGammaC, _sgmGammaP);
         delete srt;
-        delete subDepths;
-        svol->addVolumeSecondMin(simVolume,(*depthsTcamsLimits)[c].x,(*depthsTcamsLimits)[c].y);
+        svol->addVolumeSecondMin(simVolume,_depthsTcamsLimits[c].x,_depthsTcamsLimits[c].y);
         delete simVolume;
     }
 
-    // Reduction of 'volume' (X, Y, Z) into 'volumeStepZ' (X, Y, Z/step)
+    //if(_sp->exportIntermediateResults)
+    //  svol->exportVolume(*_depths, _rc, _scale, _step, _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "_vol_beforeReduction.abc");
+
+    // reduction of 'volume' (X, Y, Z) into 'volumeStepZ' (X, Y, Z/step)
     svol->cloneVolumeSecondStepZ();
 
-    // Filter on the 3D volume to weight voxels based on their neighborhood strongness.
-    // So it downweights local minimums that are not supported by their neighborhood.
-    if(sp->doSGMoptimizeVolume) // this is here for experimental reason ... to show how SGGC work on non
-                                // optimized depthmaps ... it must equals to true in normal case
+    if(_sp->exportIntermediateResults)
     {
-        svol->SGMoptimizeVolumeStepZ(rc, step, 0, 0, scale);
+      svol->exportVolumeStep(*_depths, _rc, _scale, _step, _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "_vol_afterReduction.abc");
+      svol->export9PCSV(*_depths, _rc, _scale, _step, "afterReduction", _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "_9p.csv");
     }
 
-    // For each pixel: choose the voxel with the minimal similarity value
-    int zborder = 2;
-    StaticVector<IdValue>* volumeBestIdVal = svol->getOrigVolumeBestIdValFromVolumeStepZ(zborder);
+    // filter on the 3D volume to weight voxels based on their neighborhood strongness.
+    // so it downweights local minimums that are not supported by their neighborhood.
+    // this is here for experimental reason ... to show how SGGC work on non
+    // optimized depthmaps ... it must equals to true in normal case
+    if(_sp->doSGMoptimizeVolume)
+        svol->SGMoptimizeVolumeStepZ(_rc, _step, 0, 0, _scale);
+
+    if(_sp->exportIntermediateResults)
+    {
+      svol->exportVolumeStep(*_depths, _rc, _scale, _step, _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "_vol_afterFiltering.abc");
+      svol->export9PCSV(*_depths, _rc, _scale, _step, "afterFiltering", _sp->mp->getDepthMapsFolder() + std::to_string(_sp->mp->getViewId(_rc)) + "_9p.csv");
+    }
+
+    // for each pixel: choose the voxel with the minimal similarity value
+    const int zborder = 2;
+    _volumeBestIdVal = svol->getOrigVolumeBestIdValFromVolumeStepZ(zborder);
+
     delete svol;
 
     if(rcSilhoueteMap != nullptr)
     {
-        for(int i = 0; i < w * h; i++)
+        for(int i = 0; i < _width * _height; i++)
         {
             if((*rcSilhoueteMap)[i])
             {
-                (*volumeBestIdVal)[i].id = 0;
-                (*volumeBestIdVal)[i].value = 1.0f;
+                (*_volumeBestIdVal)[i].id = 0;
+                (*_volumeBestIdVal)[i].value = 1.0f;
             }
         }
         delete rcSilhoueteMap;
+        rcSilhoueteMap = nullptr;
     }
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    mvsUtils::printfElapsedTime(tall, "SGM (rc: " + mvsUtils::num2str(_rc) + " / " + mvsUtils::num2str(_sp->mp->ncams) + ")");
 
-    saveArrayToFile<float>(depthsFileName, depths);
-    saveArrayToFile<int>(tcamsFileName, tcams);
-    saveArrayToFile<Pixel>(depthsTcamsLimitsFileName, depthsTcamsLimits);
-
-    DepthSimMap* depthSimMapFinal =
-        sp->getDepthSimMapFromBestIdVal(w, h, volumeBestIdVal, scale, step, rc, zborder, depths);
-
-    // Save to :
-    //  - SGM_{RC}_scaleX_stepN_simMap.bin
-    //  - SGM_{RC}_scaleX_stepN_depthMap.bin
-    //depthSimMapFinal->saveToBin(SGM_depthMapFileName, SGM_simMapFileName);
-
-    // Save to :
-    //  - {RC}_simMap_scaleX.exr
-    //  - {RC}_dephMap_scaleX.exr
-    // depthSimMapFinal->save(rc, tcams);
-
+    if(_sp->exportIntermediateResults)
     {
-        std::vector<unsigned short> volumeBestId(volumeBestIdVal->size());
-        for(int i = 0; i < volumeBestIdVal->size(); i++)
-            volumeBestId.at(i) = std::max(0, (*volumeBestIdVal)[i].id);
+        DepthSimMap* depthSimMapFinal = _sp->getDepthSimMapFromBestIdVal(_width, _height, _volumeBestIdVal, _scale, _step, _rc, zborder, _depths);
+        depthSimMapFinal->saveToImage(_sp->mp->getDepthMapsFolder() + "sgm_" + std::to_string(_sp->mp->getViewId(_rc)) + "_" + "scale" + mvsUtils::num2str(depthSimMapFinal->scale) + "_step" + mvsUtils::num2str(depthSimMapFinal->step) + ".png", 1.0f);
+        delete depthSimMapFinal;
 
-        imageIO::writeImage(SGM_idDepthMapFileName, volDimX, volDimY, volumeBestId);
-
-		if (sp->visualizeDepthMaps)
-        {
-            
-            std::string visualize_fn = sp->mp->getDepthMapFolder() + std::to_string(sp->mp->getViewId(rc)) + "_idDepthMap_scale" +
-                                       mvsUtils::num2str(scale) + "_step" + mvsUtils::num2str(step) +"_visualize" + "_SGM.png";
-            imageIO::writeImageScaledColors(visualize_fn, volDimX, volDimY, 0, depths->size(),volumeBestId.data(), true);
-		}
-            
+        std::vector<unsigned short> volumeBestId(_volumeBestIdVal->size());
+        for(int i = 0; i < _volumeBestIdVal->size(); i++)
+          volumeBestId.at(i) = std::max(0, (*_volumeBestIdVal)[i].id);
+        imageIO::writeImage(_sp->getSGM_idDepthMapFileName(_sp->mp->getViewId(_rc), _scale, _step), _width, _height, volumeBestId);
     }
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    mvsUtils::printfElapsedTime(tall, "PSSGM rc " + mvsUtils::num2str(rc) + " of " + mvsUtils::num2str(sp->mp->ncams));
-
-    if(sp->visualizeDepthMaps)
-        depthSimMapFinal->saveToImage(tmpDir + "SemiGlobalMatchingRc_SGM" + std::to_string(sp->mp->getViewId(rc)) + "_" + "scale" +
-                                        mvsUtils::num2str(depthSimMapFinal->scale) + "step" + mvsUtils::num2str(depthSimMapFinal->step) +
-                                        ".depthSimMap.png", 1.0f);
-
-
-    delete depthSimMapFinal;
-    delete volumeBestIdVal;
-
     return true;
-}
-
-
-void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
-                           const StaticVector<int>& cams)
-    {
-    aliceVision::mvsUtils::SGMParams sgm(mp);
-    const int bandType = 0;
-    // load images from files into RAM 
-    mvsUtils::ImagesCache ic(mp, bandType, true);
-    // load stuff on GPU memory and creates multi-level images and computes gradients
-    PlaneSweepingCuda cps(CUDADeviceNo, &ic, mp, pc, sgm.scale, cams); // ToDo add cameras to load
-    // init plane sweeping parameters
-    SemiGlobalMatchingParams sp(mp, pc, &cps);
-
-    //////////////////////////////////////////////////////////////////////////////////////////
-
-    for(const int rc : cams)
-    {
-        std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-        if(!mvsUtils::FileExists(depthMapFilepath))
-        {
-            ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
-            SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
-            psgr.sgmrc();
-        }
-        else
-        {
-            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
-        }
-    }
 }
 
 } // namespace depthMap

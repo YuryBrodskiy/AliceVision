@@ -49,7 +49,7 @@ namespace aliceVision
       * @param fInit Tell if the image should be initialized
       * @param val If fInit is true, set all pixel to the specified value
       */
-      inline Image( int width, int height, bool fInit = true, const T val = T() )
+      inline Image( int width, int height, bool fInit = false, const T val = T() )
       {
         Base::resize( height, width );
         if ( fInit )
@@ -92,7 +92,7 @@ namespace aliceVision
       /**
       * @brief destructor
       */
-      virtual inline ~Image() {};
+      virtual ~Image() = default;
       //-- Image construction method
       //------------------------------
 
@@ -163,6 +163,15 @@ namespace aliceVision
       inline T& operator()( int y, int x )
       {
         return Base::operator()( y, x );
+      }
+
+      inline const T& operator()( int i ) const
+      {
+        return Base::operator()( i );
+      }
+      inline T& operator()( int i )
+      {
+        return Base::operator()( i );
       }
 
       /**

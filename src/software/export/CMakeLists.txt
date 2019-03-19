@@ -52,17 +52,6 @@ alicevision_add_software(aliceVision_exportTracks
         ${Boost_LIBRARIES}
 )
 
-# Export undistorted images related to a sfmData file
-alicevision_add_software(aliceVision_exportUndistortedImages
-  SOURCE main_exportUndistortedImages.cpp
-  FOLDER ${FOLDER_SOFTWARE_EXPORT}
-  LINKS aliceVision_system
-        aliceVision_image
-        aliceVision_sfmData
-        aliceVision_sfmDataIO
-        ${Boost_LIBRARIES}
-)
-
 # Export a SfM aliceVision scene to PMVS format
 alicevision_add_software(aliceVision_exportPMVS
   SOURCE main_exportPMVS.cpp
@@ -72,6 +61,19 @@ alicevision_add_software(aliceVision_exportPMVS
         aliceVision_feature
         aliceVision_sfmData
         aliceVision_sfmDataIO
+        ${Boost_LIBRARIES}
+)
+
+# Export point cloud
+alicevision_add_software(aliceVision_exportColoredPointCloud
+  SOURCE main_exportColoredPointCloud.cpp
+  FOLDER ${FOLDER_SOFTWARE_EXPORT}
+  LINKS aliceVision_system
+        aliceVision_image
+        aliceVision_feature
+        aliceVision_sfmData
+        aliceVision_sfmDataIO
+        aliceVision_mesh
         ${Boost_LIBRARIES}
 )
 
