@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include <thrust/host_vector.h>
+#include <thrust/system/cuda/experimental/pinned_allocator.h>
+
 namespace aliceVision {
 namespace depthMap {
 
@@ -120,6 +123,72 @@ CudaSize<Dim> operator-(const CudaSize<Dim> &lhs, const CudaSize<Dim> &rhs) {
     out[i]-= rhs[i];
   return out;
 }
+
+
+
+
+
+
+template <class Type, unsigned Dim> class CudaHostMemoryPitched
+{
+    Type* buffer;
+    size_t sx, sy, sz;
+    CudaSize<Dim> size;
+
+public:
+    explicit CudaHostMemoryPitched(const CudaSize<Dim> &_size)
+	{ 
+		size = _size;
+        sx = 1;
+        sy = 1;
+        sz = 1;
+        if(Dim >= 1) sx = _size[0];
+        if(Dim >= 2) sy = _size[1];
+        if(Dim >= 3) sx = _size[2];
+        cudaMallocHost((void**)&buffer, sx * sy * sz * sizeof(Type));
+        cudaMemset(buffer, 0, sx * sy * sz * sizeof(Type));
+        //memset(buffer, 0, sx * sy * sz * sizeof(Type));
+	}
+
+	CudaHostMemoryPitched<Type, Dim>& operator=(const CudaHostMemoryPitched<Type, Dim>& rhs)
+    {
+        size = rhs.size;
+        sx = 1;
+        sy = 1;
+        sz = 1;
+        if(Dim >= 1) sx = rhs.sx;
+        if(Dim >= 2) sy = rhs.sy;
+        if(Dim >= 3) sx = rhs.sz;
+        cudaMallocHost((void**)&buffer, sx * sy * sz * sizeof(Type));
+        //cudaMemset(buffer, rhs.buffer, sx * sy * sz * sizeof(Type));
+
+		// Because of Type* I think that is easier than CudaMemset since it will accepts integer value which will
+        // convert to unsigned char, on the other hand cudaMemset accepts only bytes so it will need the conversion.
+        // Conversion though probably downgrade performance slightly
+        memset(buffer, rhs.buffer, sx * sy * sz * sizeof(Type));			
+		return *this;
+    }
+
+
+	const CudaSize<Dim>& getSize() const { return size; }
+    size_t getBytes() const { return sx * sy * sz * sizeof(Type); }
+    Type* getBuffer() { return buffer; }
+    const Type* getBuffer() const { return buffer; }
+    
+	Type& operator()(size_t x, size_t y) 
+	{ 
+		return buffer[y * sx + x]; 
+	}
+
+	 ~CudaHostMemoryPitched() 
+	 { 
+		 cudaFreeHost(buffer); 
+	 }
+};
+
+
+
+
 
 template <class Type, unsigned Dim> class CudaHostMemoryHeap
 {
@@ -384,6 +453,41 @@ public:
     }
     copy(*this, rhs);
   }
+
+
+  explicit inline CudaArray(const CudaHostMemoryPitched<Type, Dim>& rhs)
+  {
+      size = rhs.getSize();
+      sx = 1;
+      sy = 1;
+      sz = 1;
+      if(Dim >= 1) sx = rhs.getSize()[0];
+      if(Dim >= 2) sy = rhs.getSize()[1];
+      if(Dim >= 3) sx = rhs.getSize()[2];
+      cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<Type>();
+      if(Dim == 1)
+      {
+          cudaMallocArray(&array, &channelDesc, size[0], 1, cudaArraySurfaceLoadStore);
+      }
+      else if(Dim == 2)
+      {
+          cudaMallocArray(&array, &channelDesc, size[0], size[1], cudaArraySurfaceLoadStore);
+      }
+      else
+      {
+          cudaExtent extent;
+          extent.width = size[0];
+          extent.height = size[1];
+          extent.depth = size[2];
+          for(unsigned i = 3; i < Dim; ++i)
+              extent.depth *= size[i];
+          cudaMalloc3DArray(&array, &channelDesc, extent);
+      }
+      copy(*this, rhs);
+  }
+
+
+
   virtual ~CudaArray()
   {
     cudaFreeArray(array);
@@ -414,6 +518,21 @@ public:
   }
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 template<class Type, unsigned Dim> void copy(CudaHostMemoryHeap<Type, Dim>& _dst, const CudaDeviceMemoryPitched<Type, Dim>& _src)
 {
   cudaMemcpyKind kind = cudaMemcpyDeviceToHost;
@@ -430,6 +549,7 @@ template<class Type, unsigned Dim> void copy(CudaHostMemoryHeap<Type, Dim>& _dst
     }
   }
 }
+
 
 template<class Type, unsigned Dim> void copy(CudaHostMemoryHeap<Type, Dim>& _dst, const CudaArray<Type, Dim>& _src)
 {
@@ -460,6 +580,78 @@ template<class Type, unsigned Dim> void copy(CudaHostMemoryHeap<Type, Dim>& _dst
   }
 }
 
+
+
+
+
+
+
+//template <class Type, unsigned Dim>
+//void copy(CudaHostMemoryPitched<Type, Dim>& _dst, const CudaDeviceMemoryPitched<Type, Dim>& _src)
+//{
+//    cudaMemcpyKind kind = cudaMemcpyDeviceToHost;
+//    if(Dim == 1)
+//    {
+//        cudaMemcpy(_dst.getBuffer(), _src.getBuffer(), _src.getBytes(), kind);
+//    }
+//    else if(Dim == 2)
+//    {
+//        cudaMemcpy2D(_dst.getBuffer(), _dst.getSize()[0] * sizeof(Type), _src.getBuffer(), _src.getPitch(),
+//                     _dst.getSize()[0] * sizeof(Type), _dst.getSize()[1], kind);
+//    }
+//    else if(Dim >= 3)
+//    {
+//        for(unsigned int slice = 0; slice < _dst.getSize()[2]; slice++)
+//        {
+//            cudaMemcpy2D(_dst.getBuffer() + slice * _dst.getSize()[0] * _dst.getSize()[1],
+//                         _dst.getSize()[0] * sizeof(Type), &_src.getBuffer()[slice * _src.stride()[1]], _src.getPitch(),
+//                         _dst.getSize()[0] * sizeof(Type), _dst.getSize()[1], kind);
+//        }
+//    }
+//}
+
+//template <class Type, unsigned Dim>
+//void copy(CudaHostMemoryPitched<Type, Dim>& _dst, const CudaArray<Type, Dim>& _src)
+//{
+//    cudaMemcpyKind kind = cudaMemcpyDeviceToHost;
+//    if(Dim == 1)
+//    {
+//        cudaMemcpyFromArray(_dst.getBuffer(), _src.getArray(), 0, 0, _dst.getSize()[0] * sizeof(Type), kind);
+//    }
+//    else if(Dim == 2)
+//    {
+//        cudaMemcpy2DFromArray(_dst.getBuffer(), _dst.getSize()[0] * sizeof(Type), _src.getArray(), 0, 0,
+//                              _dst.getSize()[0] * sizeof(Type), _dst.getSize()[1], kind);
+//    }
+//    else if(Dim == 3)
+//    {
+//        cudaMemcpy3DParms p = {0};
+//        p.srcArray = const_cast<cudaArray*>(_src.getArray());
+//        p.srcPtr.pitch = _src.getPitch();
+//        p.srcPtr.xsize = _src.getSize()[0];
+//        p.srcPtr.ysize = _src.getSize()[1];
+//        p.dstPtr.ptr = (void*)_dst.getBuffer();
+//        p.dstPtr.pitch = _dst.getSize()[0] * sizeof(Type);
+//        p.dstPtr.xsize = _dst.getSize()[0];
+//        p.dstPtr.ysize = _dst.getSize()[1];
+//        p.extent.width = _dst.getSize()[0];
+//        p.extent.height = _dst.getSize()[1];
+//        p.extent.depth = _dst.getSize()[2];
+//        for(unsigned i = 3; i < Dim; ++i)
+//            p.extent.depth *= _src.getSize()[i];
+//        p.kind = kind;
+//        cudaMemcpy3D(&p);
+//    }
+//}
+
+
+
+
+
+
+
+
+
 template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const CudaHostMemoryHeap<Type, Dim>& _src)
 {
   cudaMemcpyKind kind = cudaMemcpyHostToDevice;
@@ -476,6 +668,36 @@ template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>&
     }
   }
 }
+
+
+
+//template <class Type, unsigned Dim>
+//void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const CudaHostMemoryPitched<Type, Dim>& _src)
+//{
+//    cudaMemcpyKind kind = cudaMemcpyHostToDevice;
+//    if(Dim == 1)
+//    {
+//        cudaMemcpy(_dst.getBuffer(), _src.getBuffer(), _src.getBytes(), kind);
+//    }
+//    else if(Dim == 2)
+//    {
+//        cudaMemcpy2D(_dst.getBuffer(), _dst.getPitch(), _src.getBuffer(), _src.getSize()[0] * sizeof(Type),
+//                     _src.getSize()[0] * sizeof(Type), _src.getSize()[1], kind);
+//    }
+//    else if(Dim >= 3)
+//    {
+//        for(unsigned int slice = 0; slice < _src.getSize()[2]; slice++)
+//        {
+//            cudaMemcpy2D(&_dst.getBuffer()[slice * _dst.stride()[1]], _dst.getPitch(),
+//                         _src.getBuffer() + slice * _src.getSize()[0] * _src.getSize()[1],
+//                         _src.getSize()[0] * sizeof(Type), _src.getSize()[0] * sizeof(Type), _src.getSize()[1], kind);
+//        }
+//    }
+//}
+
+
+
+
 
 template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const CudaDeviceMemoryPitched<Type, Dim>& _src)
 {
@@ -552,6 +774,45 @@ template<class Type, unsigned Dim> void copy(CudaArray<Type, Dim>& _dst, const C
   }
 }
 
+
+
+template <class Type, unsigned Dim>
+void copy(CudaArray<Type, Dim>& _dst, const CudaHostMemoryPitched<Type, Dim>& _src)
+{
+    cudaMemcpyKind kind = cudaMemcpyHostToDevice;
+    if(Dim == 1)
+    {
+        cudaMemcpyToArray(_dst.getArray(), 0, 0, _src.getBuffer(), _src.getSize()[0] * sizeof(Type), kind);
+    }
+    else if(Dim == 2)
+    {
+        cudaMemcpy2DToArray(_dst.getArray(), 0, 0, _src.getBuffer(), _src.getSize()[0] * sizeof(Type),
+                            _src.getSize()[0] * sizeof(Type), _src.getSize()[1], kind);
+    }
+    else if(Dim == 3)
+    {
+        cudaMemcpy3DParms p = {0};
+        p.srcPtr.ptr = (void*)_src.getBuffer();
+        p.srcPtr.pitch = _src.getSize()[0] * sizeof(Type);
+        p.srcPtr.xsize = _src.getSize()[0];
+        p.srcPtr.ysize = _src.getSize()[1];
+        p.dstArray = _dst.getArray();
+        p.dstPtr.pitch = _dst.getPitch();
+        p.dstPtr.xsize = _dst.getSize()[0];
+        p.dstPtr.ysize = _dst.getSize()[1];
+        p.extent.width = _src.getSize()[0];
+        p.extent.height = _src.getSize()[1];
+        p.extent.depth = _src.getSize()[2];
+        for(unsigned i = 3; i < Dim; ++i)
+            p.extent.depth *= _src.getSize()[i];
+        p.kind = kind;
+        cudaMemcpy3D(&p);
+    }
+}
+
+
+
+
 template<class Type, unsigned Dim> void copy(CudaArray<Type, Dim>& _dst, const CudaDeviceMemoryPitched<Type, Dim>& _src)
 {
   cudaMemcpyKind kind = cudaMemcpyDeviceToDevice;
@@ -581,6 +842,29 @@ template<class Type, unsigned Dim> void copy(CudaArray<Type, Dim>& _dst, const C
   }
 }
 
+
+
+
+
+
+ template <class Type, unsigned Dim>
+ void copy(thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* _dst,
+          size_t sx, size_t sy, const CudaDeviceMemoryPitched<Type, Dim>& _src)
+{
+    if(Dim == 2)
+    {
+        cudaMemcpy2D(_dst, sx * sizeof(Type), _src.getBuffer(), _src.getPitch(), sx * sizeof(Type), sy,
+                     cudaMemcpyDeviceToHost);
+    }
+}
+
+
+
+
+
+
+
+
 template<class Type, unsigned Dim> void copy(Type* _dst, size_t sx, size_t sy, const CudaDeviceMemoryPitched<Type, Dim>& _src)
 {
   if(Dim == 2) {
@@ -588,12 +872,14 @@ template<class Type, unsigned Dim> void copy(Type* _dst, size_t sx, size_t sy, c
   }
 }
 
+
 template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const Type* _src, size_t sx, size_t sy)
 {
   if(Dim == 2) {
     cudaMemcpy2D(_dst.getBuffer(), _dst.getPitch(), _src, sx * sizeof (Type), sx * sizeof(Type), sy, cudaMemcpyHostToDevice);
   }
 }
+
 
 template<class Type, unsigned Dim> void copy(Type* _dst, size_t sx, size_t sy, size_t sz, const CudaDeviceMemoryPitched<Type, Dim>& _src)
 {
@@ -605,7 +891,48 @@ template<class Type, unsigned Dim> void copy(Type* _dst, size_t sx, size_t sy, s
   }
 }
 
-template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const Type* _src, size_t sx, size_t sy, size_t sz)
+
+
+template <class Type, unsigned Dim>
+void copyAsync(Type* _dst, size_t sx, size_t sy, size_t sz, const CudaDeviceMemoryPitched<Type, Dim>& _src, cudaStream_t &stream)
+{
+    if(Dim >= 3)
+    {
+        for(unsigned int slice = 0; slice < sz; slice++)
+        {
+            cudaMemcpy2DAsync(_dst + sx * sy * slice, sx * sizeof(Type), &_src.getBuffer()[slice * _src.stride()[1]], _src.getPitch(), sx * sizeof(Type), sy, cudaMemcpyDeviceToHost, stream);
+        }
+    }
+}
+
+
+
+template <class Type, unsigned Dim>
+void copy(thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* _dst,
+          size_t sx, size_t sy, size_t sz, const CudaDeviceMemoryPitched<Type, Dim>& _src)
+{
+    //printf("I AM HERE");
+
+    if(Dim >= 3)
+    {
+        //printf("I AM HERE");
+
+        for(unsigned int slice = 0; slice < sz; slice++)
+        {
+            cudaMemcpy2D(_dst + sx * sy * slice, sx * sizeof(Type), &_src.getBuffer()[slice * _src.stride()[1]],
+                         _src.getPitch(), sx * sizeof(Type), sy, cudaMemcpyDeviceToHost);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>& _dst, const Type* _src, size_t sx, size_t sy, size_t sz, int rc)
 {
   if(Dim >= 3) {
     for (unsigned int slice=0; slice<sz; slice++)
@@ -614,6 +941,13 @@ template<class Type, unsigned Dim> void copy(CudaDeviceMemoryPitched<Type, Dim>&
     }
   }
 }
+
+
+
+
+
+
+
 
 struct cameraStruct
 {

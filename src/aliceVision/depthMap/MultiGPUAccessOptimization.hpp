@@ -12,9 +12,15 @@ namespace aliceVision
 {
 namespace depthMap
 {
+
 void savePointCloudXYZ(mvsUtils::ImagesCache& imageCache, int rc, mvsUtils::MultiViewParams* mp);
 
 typedef void (*GPUJob)(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams);
+
+//Alexandros:
+void processImageStreamParallel(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams);
+
+
 
 void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams);
 

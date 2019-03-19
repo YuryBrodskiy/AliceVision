@@ -61,7 +61,11 @@ SemiGlobalMatchingRc::SemiGlobalMatchingRc(bool doComputeDepthsAndResetTCams, in
 
     if(doComputeDepthsAndResetTCams)
     {
-        computeDepthsAndResetTCams();
+        //long tall = clock();
+
+        computeDepthsAndResetTCams(rc);			//Approx 0.045ms-0.070ms (when writing the files) and 0.001ms-0.003ms (when not) so it is OK
+
+		//mvsUtils::printfElapsedTime(tall, "COMPUTING DEPTHS");
     }
     else
     {
@@ -84,6 +88,108 @@ SemiGlobalMatchingRc::~SemiGlobalMatchingRc()
     delete depths;
     delete depthsTcamsLimits;
 }
+
+
+
+void WriteRCsConnectedCameras(int rc, StaticVector<int>* tcams) {
+    std::string filepath = "C:/Users/apg/Documents/ConnectedCameras/OldAlice/";
+    filepath.append(std::to_string(rc));
+    filepath.append(".txt");
+    std::ofstream inFile(filepath);
+
+    for(int i = 0; i < tcams->size(); i++)
+    {
+        inFile << (*tcams)[i] << std::endl;
+    }
+
+    inFile.close();
+}
+
+
+
+
+void WriteSimVolumeToFilePinnedMemory(int rc, int tcam, thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* simVolume)
+{
+    std::string filepath = "C:/Users/apg/Documents/SimilarityVolumes/PinnedMemory/";
+    filepath.append(std::to_string(rc));
+    if(tcam != 0)
+    {
+        filepath.append("_");
+        filepath.append(std::to_string(tcam));
+    }
+    filepath.append(".txt");
+    std::ofstream inFile(filepath);
+
+	thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>> vector = *simVolume;
+	for (int i = 0; i < vector.size(); i++)
+	{
+        inFile << vector[i];
+	}
+
+	inFile.close();
+}
+
+
+void WriteSimVolumeToFile(int rc, int tcam, StaticVector<unsigned char>* simVolume)
+{
+    std::string filepath = "C:/Users/apg/Documents/SimilarityVolumes/NoPinnedMemory/";
+    filepath.append(std::to_string(rc));
+    if(tcam != 0)
+    {
+        filepath.append("_");
+        filepath.append(std::to_string(tcam));
+	}
+    filepath.append(".txt");
+    std::ofstream inFile(filepath);
+
+    StaticVector<unsigned char> vector = *simVolume;
+    for(int i = 0; i < vector.size(); i++)
+    {
+        inFile << vector[i];
+    }
+
+	inFile.close();
+}
+
+
+void WriteVolumeBestIdValToFile(int rc, StaticVector<IdValue> volumeBestIdVal)
+{
+    std::string filepath = "C:/Users/apg/Documents/VolumeBestIdVal/NoPinned/";
+    filepath.append(std::to_string(rc));
+    filepath.append(".txt");
+    std::ofstream inFile(filepath);
+
+    std::vector<IdValue> vector = volumeBestIdVal.getData();
+    for(int i = 0; i < vector.size(); i++)
+    {
+        inFile << vector[i].value;
+    }
+
+    inFile.close();
+}
+
+void WriteVolumeBestIdValToFilePinned(int rc, StaticVector<IdValue> volumeBestIdVal) 
+{
+    std::string filepath = "C:/Users/apg/Documents/VolumeBestIdVal/Pinned/";
+    filepath.append(std::to_string(rc));
+    filepath.append(".txt");
+    std::ofstream inFile(filepath);
+
+	std::vector<IdValue> vector = volumeBestIdVal.getData();
+    for(int i = 0; i < vector.size(); i++)
+    {
+        inFile << vector[i].value;
+    }
+
+    inFile.close();
+}
+
+
+
+
+
+
+
 
 /**
  * @brief Depths of all seeds (regarding the camera plane and not the camera center).
@@ -272,12 +378,19 @@ void SemiGlobalMatchingRc::computeDepths(float minDepth, float maxDepth, StaticV
     }
 }
 
+
+
+
+
 /**
  * @brief Compute depths of the principal ray of reference camera rc visible by a pixel in a target camera tc
  *        providing meaningful 3d information.
  */
-StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndResetTCams()
+StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndResetTCams(int rc)
 {
+	//Alexandros:
+    //WriteRCsConnectedCameras(rc, tcams);
+
     /*
     for (int c=0;c<tcams->size();c++) {
             printf("%i %i\n",c,(*tcams)[c]);
@@ -295,8 +408,13 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
     {
         // depths of all meaningful points on the principal ray of the reference camera regarding the target camera tc
         StaticVector<float>* tcdepths = sp->cps->getDepthsRcTc(rc, (*tcams)[c], scale, midDepth, sp->rcTcDepthsHalfLimit);
+
+		ALICEVISION_LOG_DEBUG("TCDEPTHS SIZE: " << tcdepths->size());
+
         if(sizeOfStaticVector<float>(tcdepths) < 50)
         {
+            ALICEVISION_LOG_DEBUG("TCDEPTHS SIZE LESS THAN 50");
+
             // fallback if we don't have enough valid samples over the epipolar line
             if(tcdepths != nullptr)
             {
@@ -309,6 +427,8 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
 
             if(sizeOfStaticVector<float>(tcdepths) < 50)
             {
+                ALICEVISION_LOG_DEBUG("TCDEPTHS SIZE !!!!STILL!!! LESS THAN 50");
+
                 if(tcdepths != nullptr)
                 {
                     delete tcdepths;
@@ -335,6 +455,11 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
 
     return alldepths;
 }
+
+
+
+
+
 
 /**
  * @ brief Fill depthsTcamsLimits member variable with index range of depths to sweep
@@ -364,10 +489,13 @@ void SemiGlobalMatchingRc::computeDepthsTcamsLimits(StaticVector<StaticVector<fl
     }
 }
 
-void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
+
+
+
+void SemiGlobalMatchingRc::computeDepthsAndResetTCams(int rc)
 {
     // all depths from the principal ray provided by target cameras
-    StaticVector<StaticVector<float>*>* alldepths = computeAllDepthsAndResetTCams();
+    StaticVector<StaticVector<float>*>* alldepths = computeAllDepthsAndResetTCams(rc);
 
     float minDepthAll = std::numeric_limits<float>::max();
     float maxDepthAll = 0.0f;
@@ -384,10 +512,12 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
     if(!sp->useSeedsToCompDepthsToSweep)
     {
         computeDepths(minDepthAll, maxDepthAll, alldepths);
-        if(sp->saveDepthsToSweepToTxtForVis)
+        if(/*sp->saveDepthsToSweepToTxtForVis*/ true)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
-            FILE* f = fopen(fn.c_str(), "w");
+            //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
+            std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
+
+			FILE* f = fopen(fn.c_str(), "w");
             for(int j = 0; j < depths->size(); j++)
             {
                 float depth = (*depths)[j];
@@ -431,9 +561,12 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
         computeDepths(minDepth, maxDepth, alldepths);
 
         if(sp->saveDepthsToSweepToTxtForVis)
+		//if(true)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
-            FILE* f = fopen(fn.c_str(), "w");
+            //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
+            std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "depthsAll.txt";
+			
+			FILE* f = fopen(fn.c_str(), "w");
             for(int j = 0; j < depths->size(); j++)
             {
                 float depth = (*depths)[j];
@@ -446,9 +579,12 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
         selectBestDepthsRange(sp->maxDepthsToStore, alldepths);
 
         if(sp->saveDepthsToSweepToTxtForVis)
+        //if(true)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "rcSeedsDists.txt";
-            FILE* f = fopen(fn.c_str(), "w");
+            //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "rcSeedsDists.txt";
+            std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "rcSeedsDists.txt";
+			
+			FILE* f = fopen(fn.c_str(), "w");
             for(int j = 0; j < rcSeedsDistsAsc->size(); j++)
             {
                 float depth = (*rcSeedsDistsAsc)[j];
@@ -464,9 +600,12 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
     computeDepthsTcamsLimits(alldepths);
 
     if(sp->saveDepthsToSweepToTxtForVis)
+    //if(true)
     {
-        std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsTcamsLimits.txt";
-        FILE* f = fopen(fn.c_str(), "w");
+        //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depthsTcamsLimits.txt";
+        std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "depthsTcamsLimits.txt";
+		
+		FILE* f = fopen(fn.c_str(), "w");
         for(int j = 0; j < depthsTcamsLimits->size(); j++)
         {
             Pixel l = (*depthsTcamsLimits)[j];
@@ -477,9 +616,12 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
     }
 
     if(sp->saveDepthsToSweepToTxtForVis)
+    //if(true)
     {
-        std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depths.txt";
-        FILE* f = fopen(fn.c_str(), "w");
+        //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depths.txt";
+        std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "depths.txt";
+		
+		FILE* f = fopen(fn.c_str(), "w");
         for(int j = 0; j < depths->size(); j++)
         {
             float depth = (*depths)[j];
@@ -489,11 +631,14 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
     }
 
     if(sp->saveDepthsToSweepToTxtForVis)
+    //if(true)
     {
         for(int i = 0; i < alldepths->size(); i++)
         {
-            std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depths" + mvsUtils::num2str(i) + ".txt";
-            FILE* f = fopen(fn.c_str(), "w");
+            //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "depths" + mvsUtils::num2str(i) + ".txt";
+            std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "depths" + mvsUtils::num2str(i) + ".txt";			
+			
+			FILE* f = fopen(fn.c_str(), "w");
             for(int j = 0; j < (*alldepths)[i]->size(); j++)
             {
                 float depth = (*(*alldepths)[i])[j];
@@ -504,14 +649,17 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
     }
 
     if(sp->saveDepthsToSweepToTxtForVis)
+	//if(true)
     {
         OrientedPoint rcplane;
         rcplane.p = sp->mp->CArr[rc];
         rcplane.n = sp->mp->iRArr[rc] * Point3d(0.0, 0.0, 1.0);
         rcplane.n = rcplane.n.normalize();
 
-        std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "rcDepths.txt";
-        FILE* f = fopen(fn.c_str(), "w");
+        //std::string fn = tmpDir + std::to_string(sp->mp->getViewId(rc)) + "rcDepths.txt";
+        std::string fn = "C:/Users/apg/Documents/DepthMapWorkingInParallel/DepthResultsFroVisualization/" + std::to_string(sp->mp->getViewId(rc)) + "rcDepths.txt";
+		
+		FILE* f = fopen(fn.c_str(), "w");
         float depth = minDepthAll;
         while(depth < maxDepthAll)
         {
@@ -527,6 +675,10 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
 
     deleteArrayOfArrays<float>(&alldepths);
 }
+
+
+
+
 
 StaticVector<float>* SemiGlobalMatchingRc::getSubDepthsForTCam(int tcamid)
 {
@@ -549,6 +701,8 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
 
     if(tcams->size() == 0)
     {
+        ALICEVISION_LOG_DEBUG("TCAMS SIZE IS ZERO!!!");
+
         return false;
     }
 
@@ -564,7 +718,11 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
     int volDimZ = depths->size();
     float volumeMBinGPUMem = 0.0f;
 
+
     StaticVector<unsigned char>* simVolume = nullptr;
+    //thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* simVolume;
+
+
 
     StaticVectorBool* rcSilhoueteMap = nullptr;
     if(sp->useSilhouetteMaskCodedByColor)
@@ -578,7 +736,15 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
     {
         StaticVector<float>* subDepths = getSubDepthsForTCam(0);
         SemiGlobalMatchingRcTc srt(subDepths, rc, (*tcams)[0], scale, step, sp, rcSilhoueteMap);
-        simVolume = srt.computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
+        
+		
+		simVolume = srt.computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
+        //simVolume = srt.computeDepthSimMapVolumeMemoryPinned(volumeMBinGPUMem, wsh, gammaC, gammaP);
+
+		//WriteSimVolumeToFile(rc, 0, simVolume);
+		//WriteSimVolumeToFilePinnedMemory(rc, 0, simVolume);			//simVolume (the copy method) works correctly now
+
+
         delete subDepths;
     }
 
@@ -587,21 +753,32 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
 
     SemiGlobalMatchingVolume* svol = new SemiGlobalMatchingVolume(volumeMBinGPUMem, volDimX, volDimY, volDimZ, sp);
     svol->copyVolume(simVolume, (*depthsTcamsLimits)[0].x, (*depthsTcamsLimits)[0].y);
+
     delete simVolume;
 
     for(int c = 1; c < tcams->size(); c++)
     {
         StaticVector<float>* subDepths = getSubDepthsForTCam(c);
         SemiGlobalMatchingRcTc* srt = new SemiGlobalMatchingRcTc(subDepths, rc, (*tcams)[c], scale, step, sp, rcSilhoueteMap);
+
+
         simVolume = srt->computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
-        delete srt;
+        //simVolume = srt->computeDepthSimMapVolumeMemoryPinned(volumeMBinGPUMem, wsh, gammaC, gammaP);
+
+		//WriteSimVolumeToFile(rc, c, simVolume);
+		//WriteSimVolumeToFilePinnedMemory(rc, c, simVolume); // simVolume (the copy method) works correctly now
+
+		delete srt;
         delete subDepths;
         svol->addVolumeSecondMin(simVolume,(*depthsTcamsLimits)[c].x,(*depthsTcamsLimits)[c].y);
         delete simVolume;
     }
 
     // Reduction of 'volume' (X, Y, Z) into 'volumeStepZ' (X, Y, Z/step)
-    svol->cloneVolumeSecondStepZ();
+
+    svol->cloneVolumeSecondStepZ(rc);
+    //svol->cloneVolumeSecondStepZPinnedMemory(rc);			//Seems correct
+
 
     // Filter on the 3D volume to weight voxels based on their neighborhood strongness.
     // So it downweights local minimums that are not supported by their neighborhood.
@@ -609,11 +786,18 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
                                 // optimized depthmaps ... it must equals to true in normal case
     {
         svol->SGMoptimizeVolumeStepZ(rc, step, 0, 0, scale);
+        //svol->SGMoptimizeVolumeStepZPinnedMemory(rc, step, 0, 0, scale);				//Seems correct
     }
 
     // For each pixel: choose the voxel with the minimal similarity value
     int zborder = 2;
+
     StaticVector<IdValue>* volumeBestIdVal = svol->getOrigVolumeBestIdValFromVolumeStepZ(zborder);
+    //StaticVector<IdValue>* volumeBestIdVal = svol->getOrigVolumeBestIdValFromVolumeStepZPinned(zborder);		//Seems Correct
+
+	//WriteVolumeBestIdValToFile(rc, *volumeBestIdVal);
+    //WriteVolumeBestIdValToFilePinned(rc, *volumeBestIdVal);
+
     delete svol;
 
     if(rcSilhoueteMap != nullptr)
@@ -683,6 +867,184 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
 
     return true;
 }
+
+
+
+bool SemiGlobalMatchingRc::sgmrc(cudaStream_t &stream, bool checkIfExists)
+{
+    if(sp->mp->verbose)
+        ALICEVISION_LOG_DEBUG("sgmrc: processing " << (rc + 1) << " of " << sp->mp->ncams << ".");
+
+    if(tcams->size() == 0)
+    {
+        return false;
+    }
+
+    if((mvsUtils::FileExists(SGM_idDepthMapFileName)) && (checkIfExists))
+    {
+        return false;
+    }
+
+    long tall = clock();
+
+    int volDimX = w;
+    int volDimY = h;
+    int volDimZ = depths->size();
+    float volumeMBinGPUMem = 0.0f;
+
+    // StaticVector<unsigned char>* simVolume = nullptr;
+    thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* simVolume;
+
+	#pragma region Not_used
+
+	StaticVectorBool* rcSilhoueteMap = nullptr;
+    if(sp->useSilhouetteMaskCodedByColor)
+    {
+        rcSilhoueteMap = new StaticVectorBool();
+        rcSilhoueteMap->reserve(w * h);
+        rcSilhoueteMap->resize_with(w * h, true);
+        sp->cps->getSilhoueteMap(rcSilhoueteMap, scale, step, sp->silhouetteMaskColor, rc);
+    }
+#pragma endregion
+
+    {
+        StaticVector<float>* subDepths = getSubDepthsForTCam(0);
+        SemiGlobalMatchingRcTc srt(subDepths, rc, (*tcams)[0], scale, step, sp, rcSilhoueteMap);
+
+        // simVolume = srt.computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
+        simVolume = srt.computeDepthSimMapVolumeMemoryPinned(volumeMBinGPUMem, wsh, gammaC, gammaP, stream);
+
+        // WriteSimVolumeToFile(rc, 0, simVolume);
+         //WriteSimVolumeToFilePinnedMemory(rc, 0, simVolume);			//simVolume (the copy method) works correctly
+        // now
+
+        delete subDepths;
+    }
+
+    // recompute to all depths
+    volumeMBinGPUMem = ((volumeMBinGPUMem / (float)(*depthsTcamsLimits)[0].y) * (float)volDimZ);
+
+    SemiGlobalMatchingVolume* svol = new SemiGlobalMatchingVolume(volumeMBinGPUMem, volDimX, volDimY, volDimZ, sp);
+    svol->copyVolume(simVolume, (*depthsTcamsLimits)[0].x, (*depthsTcamsLimits)[0].y);
+
+    delete simVolume;
+
+    for(int c = 1; c < tcams->size(); c++)
+    {
+        StaticVector<float>* subDepths = getSubDepthsForTCam(c);
+        SemiGlobalMatchingRcTc* srt =
+            new SemiGlobalMatchingRcTc(subDepths, rc, (*tcams)[c], scale, step, sp, rcSilhoueteMap);
+
+        // simVolume = srt->computeDepthSimMapVolume(volumeMBinGPUMem, wsh, gammaC, gammaP);
+        simVolume = srt->computeDepthSimMapVolumeMemoryPinned(volumeMBinGPUMem, wsh, gammaC, gammaP, stream);
+
+        // WriteSimVolumeToFile(rc, c, simVolume);
+        // WriteSimVolumeToFilePinnedMemory(rc, c, simVolume); // simVolume (the copy method) works correctly now
+
+        delete srt;
+        delete subDepths;
+        svol->addVolumeSecondMin(simVolume, (*depthsTcamsLimits)[c].x, (*depthsTcamsLimits)[c].y);
+        delete simVolume;
+    }
+
+    // Reduction of 'volume' (X, Y, Z) into 'volumeStepZ' (X, Y, Z/step)
+
+    // svol->cloneVolumeSecondStepZ(rc);
+    svol->cloneVolumeSecondStepZPinnedMemory(rc); // Seems correct
+
+    // Filter on the 3D volume to weight voxels based on their neighborhood strongness.
+    // So it downweights local minimums that are not supported by their neighborhood.
+    if(sp->doSGMoptimizeVolume) // this is here for experimental reason ... to show how SGGC work on non
+                                // optimized depthmaps ... it must equals to true in normal case
+    {
+        // svol->SGMoptimizeVolumeStepZ(rc, step, 0, 0, scale);
+        svol->SGMoptimizeVolumeStepZPinnedMemory(rc, step, 0, 0, scale); // Seems correct
+    }
+
+    // For each pixel: choose the voxel with the minimal similarity value
+    int zborder = 2;
+
+    // StaticVector<IdValue>* volumeBestIdVal = svol->getOrigVolumeBestIdValFromVolumeStepZ(zborder);
+    StaticVector<IdValue>* volumeBestIdVal = svol->getOrigVolumeBestIdValFromVolumeStepZPinned(zborder); // Seems
+                                                                                                         // Correct
+
+    // WriteVolumeBestIdValToFile(rc, *volumeBestIdVal);
+    // WriteVolumeBestIdValToFilePinned(rc, *volumeBestIdVal);
+
+    delete svol;
+
+    if(rcSilhoueteMap != nullptr)
+    {
+        for(int i = 0; i < w * h; i++)
+        {
+            if((*rcSilhoueteMap)[i])
+            {
+                (*volumeBestIdVal)[i].id = 0;
+                (*volumeBestIdVal)[i].value = 1.0f;
+            }
+        }
+        delete rcSilhoueteMap;
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    saveArrayToFile<float>(depthsFileName, depths);
+    saveArrayToFile<int>(tcamsFileName, tcams);
+    saveArrayToFile<Pixel>(depthsTcamsLimitsFileName, depthsTcamsLimits);
+
+    DepthSimMap* depthSimMapFinal =
+        sp->getDepthSimMapFromBestIdVal(w, h, volumeBestIdVal, scale, step, rc, zborder, depths);
+
+    // Save to :
+    //  - SGM_{RC}_scaleX_stepN_simMap.bin
+    //  - SGM_{RC}_scaleX_stepN_depthMap.bin
+    // depthSimMapFinal->saveToBin(SGM_depthMapFileName, SGM_simMapFileName);
+
+    // Save to :
+    //  - {RC}_simMap_scaleX.exr
+    //  - {RC}_dephMap_scaleX.exr
+    // depthSimMapFinal->save(rc, tcams);
+
+    {
+        std::vector<unsigned short> volumeBestId(volumeBestIdVal->size());
+        for(int i = 0; i < volumeBestIdVal->size(); i++)
+            volumeBestId.at(i) = std::max(0, (*volumeBestIdVal)[i].id);
+
+        imageIO::writeImage(SGM_idDepthMapFileName, volDimX, volDimY, volumeBestId);
+
+        if(sp->visualizeDepthMaps)
+        {
+
+            std::string visualize_fn = sp->mp->getDepthMapFolder() + std::to_string(sp->mp->getViewId(rc)) +
+                                       "_idDepthMap_scale" + mvsUtils::num2str(scale) + "_step" +
+                                       mvsUtils::num2str(step) + "_visualize" + "_SGM.png";
+            imageIO::writeImageScaledColors(visualize_fn, volDimX, volDimY, 0, depths->size(), volumeBestId.data(),
+                                            true);
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    mvsUtils::printfElapsedTime(tall, "PSSGM rc " + mvsUtils::num2str(rc) + " of " + mvsUtils::num2str(sp->mp->ncams));
+
+    if(sp->visualizeDepthMaps)
+        depthSimMapFinal->saveToImage(tmpDir + "SemiGlobalMatchingRc_SGM" + std::to_string(sp->mp->getViewId(rc)) +
+                                          "_" + "scale" + mvsUtils::num2str(depthSimMapFinal->scale) + "step" +
+                                          mvsUtils::num2str(depthSimMapFinal->step) + ".depthSimMap.png",
+                                      1.0f);
+
+    delete depthSimMapFinal;
+    delete volumeBestIdVal;
+
+    return true;
+}
+
+
+
+
 
 
 void computeDepthMapsPSSGM(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,

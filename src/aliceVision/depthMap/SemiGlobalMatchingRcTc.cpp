@@ -61,6 +61,7 @@ StaticVector<Voxel>* SemiGlobalMatchingRcTc::getPixels()
     return pixels;
 }
 
+
 StaticVector<unsigned char>* SemiGlobalMatchingRcTc::computeDepthSimMapVolume(float& volumeMBinGPUMem, int wsh, float gammaC,
                                                                    float gammaP)
 {
@@ -71,9 +72,9 @@ StaticVector<unsigned char>* SemiGlobalMatchingRcTc::computeDepthSimMapVolume(fl
     int volDimY = h;
     int volDimZ = rcTcDepths->size();
 
-    StaticVector<unsigned char>* volume = new StaticVector<unsigned char>();
+    StaticVector<unsigned char>* volume = new StaticVector<unsigned char>();				//I want to change this volume to be in pinned memory
     volume->reserve(volDimX * volDimY * volDimZ);
-    volume->resize_with(volDimX * volDimY * volDimZ, 255);
+    volume->resize_with(volDimX * volDimY * volDimZ, 255);	//This seems ackward since it initially reserved n size and then resizes to n and new elements will have 255 value but they are not going to be new elements or fewer!!!
 
     StaticVector<int>* tcams = new StaticVector<int>();
     tcams->reserve(1);
@@ -84,6 +85,9 @@ StaticVector<unsigned char>* SemiGlobalMatchingRcTc::computeDepthSimMapVolume(fl
     volumeMBinGPUMem =
         sp->cps->sweepPixelsToVolume(rcTcDepths->size(), volume, volDimX, volDimY, volDimZ, volStepXY, 0, 0, 0,
                                      rcTcDepths, rc, wsh, gammaC, gammaP, pixels, scale, 1, tcams, 0.0f);
+
+
+
     delete pixels;
     delete tcams;
 
@@ -107,6 +111,83 @@ StaticVector<unsigned char>* SemiGlobalMatchingRcTc::computeDepthSimMapVolume(fl
 
     return volume;
 }
+
+
+
+
+
+
+thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* SemiGlobalMatchingRcTc::computeDepthSimMapVolumeMemoryPinned(float& volumeMBinGPUMem, int wsh, float gammaC, float gammaP, cudaStream_t &stream)
+{
+    long tall = clock();
+
+    int volStepXY = step;
+    int volDimX = w;
+    int volDimY = h;
+    int volDimZ = rcTcDepths->size();
+
+    // StaticVector<unsigned char>* volume = new StaticVector<unsigned char>();				//I want to change this volume to be in pinned memory
+    // volume->reserve(volDimX * volDimY * volDimZ); 
+	// volume->resize_with(volDimX * volDimY * volDimZ, 255);	//This seems ackward since it initially reserved n size and then resizes to n and new elements will have 255 value but they are not going to be new elements or fewer!!!
+
+    thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* volumePinnedMemory = new thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>();
+    volumePinnedMemory->reserve(volDimX * volDimY * volDimZ);
+    volumePinnedMemory->resize(volDimX * volDimY * volDimZ, 255);
+
+
+    StaticVector<int>* tcams = new StaticVector<int>();
+    tcams->reserve(1);
+    tcams->push_back(tc);
+
+    StaticVector<Voxel>* pixels = getPixels();
+
+    /* volumeMBinGPUMem =
+         sp->cps->sweepPixelsToVolume(rcTcDepths->size(), volume, volDimX, volDimY, volDimZ, volStepXY, 0, 0, 0,
+                                      rcTcDepths, rc, wsh, gammaC, gammaP, pixels, scale, 1, tcams, 0.0f);*/
+
+    volumeMBinGPUMem = sp->cps->sweepPixelsToVolumePinnedMemory(rcTcDepths->size(), volumePinnedMemory, volDimX,
+                                                                volDimY, volDimZ, volStepXY, 0, 0, 0, rcTcDepths, rc,
+                                                                wsh, gammaC, gammaP, pixels, scale, 1, tcams, 0.0f, stream);
+
+    delete pixels;
+    delete tcams;
+
+    if(sp->mp->verbose)
+        mvsUtils::printfElapsedTime(tall, "SemiGlobalMatchingRcTc::computeDepthSimMapVolume ");
+
+
+	/*ALICEVISION_LOG_INFO("VOLUME SIZE: " << volumePinnedMemoryPtr->size());
+    auto data = volumePinnedMemoryPtr->data();
+    ALICEVISION_LOG_INFO("DATA FIRST ELEMENT: " << data[0]);*/
+
+
+
+    /*   if(sp->P3 > 0)
+       {
+   #pragma omp parallel for
+           for(int y = 0; y < volDimY; y++)
+           {
+               for(int x = 0; x < volDimX; x++)
+               {
+                   (*volume)[(volDimZ - 1) * volDimY * volDimX + y * volDimX + x] = sp->P3;
+                   (*volume)[(volDimZ - 2) * volDimY * volDimX + y * volDimX + x] = sp->P3;
+                   (*volume)[(volDimZ - 3) * volDimY * volDimX + y * volDimX + x] = sp->P3;
+                   (*volume)[(volDimZ - 4) * volDimY * volDimX + y * volDimX + x] = sp->P3;
+               }
+           }
+       }*/
+
+    return volumePinnedMemory;
+}
+
+
+
+
+
+
+
+
+
 
 } // namespace depthMap
 } // namespace aliceVision

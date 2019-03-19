@@ -21,7 +21,7 @@ __device__ void computeRotCSEpip(patch& ptch, const float3& p)
     ptch.p = p;
 
     // Vector from the reference camera to the 3d point
-    float3 v1 = sg_s_rC - p;
+    float3 v1 = sg_s_rC - p;									//SHOULDN'T THE - BE OPPOSITE? THIS WILL RETURN OPPOSITE DIRECTION: POINT POINTING TO THE CAMERA. RIGHT?
     // Vector from the target camera to the 3d point
     float3 v2 = sg_s_tC - p;
     normalize(v1);
@@ -34,7 +34,7 @@ __device__ void computeRotCSEpip(patch& ptch, const float3& p)
     ptch.y = cross(v1, v2);
     normalize(ptch.y);
 
-    ptch.n = (v1 + v2) / 2.0f; // IMPORTANT !!!
+    ptch.n = (v1 + v2) / 2.0f; // IMPORTANT !!!					//IS THIS CORRECT WAY FOR CALCULATING THE NORMAL?
     normalize(ptch.n);
     // ptch.n = sg_s_rZVect; //IMPORTANT !!!
 

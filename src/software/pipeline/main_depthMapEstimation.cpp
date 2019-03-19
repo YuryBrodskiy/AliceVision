@@ -216,6 +216,9 @@ int main(int argc, char* argv[])
 
     {
         depthMap::doOnGPUs(&mp, &pc, cams, depthMap::processImageStream);
+
+		//Alexandros:
+        //depthMap::doOnGPUs(&mp, &pc, cams, depthMap::processImageStreamParallel);
     }
 
     ALICEVISION_LOG_INFO("Task done in (s): " + std::to_string(timer.elapsed()));

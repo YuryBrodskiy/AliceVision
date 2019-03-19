@@ -19,6 +19,9 @@
 #include <aliceVision/mvsUtils/PreMatchCams.hpp>
 #include <aliceVision/depthMap/DepthSimMap.hpp>
 
+#include <thrust/host_vector.h>
+#include <thrust/system/cuda/experimental/pinned_allocator.h>
+
 namespace aliceVision {
 namespace depthMap {
 
@@ -110,11 +113,31 @@ public:
                             StaticVector<float>* rcDepthMap, int rc, int tc, int scale, int wsh, float gammaC,
                             float gammaP, float epipShift, int xFrom, int wPart);
 
+
+
+
     float sweepPixelsToVolume(int nDepthsToSearch, StaticVector<unsigned char>* volume, int volDimX, int volDimY,
                               int volDimZ, int volStepXY, int volLUX, int volLUY, int volLUZ,
                               StaticVector<float>* depths, int rc, int wsh, float gammaC, float gammaP,
                               StaticVector<Voxel>* pixels, int scale, int step, StaticVector<int>* tcams,
                               float epipShift);
+
+
+
+	float PlaneSweepingCuda::sweepPixelsToVolumePinnedMemory(
+        int nDepthsToSearch,
+        thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>> *volume,
+        int volDimX, int volDimY, int volDimZ, int volStepXY, int volLUX, int volLUY, int volLUZ,
+        StaticVector<float>* depths, int rc, int wsh, float gammaC, float gammaP, StaticVector<Voxel>* pixels,
+        int scale, int step, StaticVector<int>* tcams, float epipShift, cudaStream_t& stream);
+
+
+
+
+
+
+
+
     bool SGMoptimizeSimVolume(int rc, StaticVector<unsigned char>* volume, int volDimX, int volDimY, int volDimZ,
                               int volStepXY, int volLUX, int volLUY, int scale, unsigned char P1, unsigned char P2);
     Point3d getDeviceMemoryInfo();
@@ -135,6 +158,16 @@ public:
                                          StaticVector<int>* rtcams, int distLimit);
     bool SGGCoptimizeSimVolume(StaticVector<unsigned short>* ftidMap, StaticVector<unsigned int>* ivolume, int _volDimX,
                                int volDimY, int volDimZ, int xFrom, int xTo, int K);
+
+
+	bool PlaneSweepingCuda::SGMoptimizeSimVolumePinnedMemory(
+        int rc, thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* volume,
+        int volDimX,
+                                                             int volDimY, int volDimZ, int volStepXY, int volLUX,
+                                                             int volLUY, int scale, unsigned char P1, unsigned char P2);
+
+
+
 
     bool fuseDepthSimMapsGaussianKernelVoting(int w, int h, StaticVector<DepthSim> *oDepthSimMap,
                                               const StaticVector<StaticVector<DepthSim> *> *dataMaps, int nSamplesHalf,

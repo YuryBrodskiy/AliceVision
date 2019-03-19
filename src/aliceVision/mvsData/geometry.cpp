@@ -47,6 +47,8 @@ void computeRotCS(Point3d* xax, Point3d* yax, const Point3d* n)
     *yax = cross(*n, *xax);
 }
 
+
+
 bool lineLineIntersect(float* k, float* l, Point3d* llis, Point3d* lli1, Point3d* lli2, const Point3d& p1,
                        const Point3d& p2, const Point3d& p3, const Point3d& p4)
 {
@@ -136,6 +138,8 @@ bool lineLineIntersect(float* k, float* l, Point3d* llis, Point3d* lli1, Point3d
 
     return true;
 }
+
+
 
 bool lineLineIntersect(Point3d& out, const Point3d& p1, const Point3d& v1, const Point3d& p2, const Point3d& v2)
 {

@@ -20,6 +20,9 @@ public:
     ~SemiGlobalMatchingRc(void);
 
     bool sgmrc(bool checkIfExists = true);
+
+	bool sgmrc(cudaStream_t &stream, bool checkIfExists = true);
+
     StaticVector<int>* tcams;
 
 protected:
@@ -29,10 +32,10 @@ protected:
     StaticVector<float>* getTcSeedsRcPlaneDists(int rc, StaticVector<int>* tcams);
     bool selectBestDepthsRange(int nDepthsThr, StaticVector<float>* rcSeedsDistsAsc);
     bool selectBestDepthsRange(int nDepthsThr, StaticVector<StaticVector<float>*>* alldepths);
-    StaticVector<StaticVector<float>*>* computeAllDepthsAndResetTCams();
+    StaticVector<StaticVector<float>*>* computeAllDepthsAndResetTCams(int rc);
     void computeDepthsTcamsLimits(StaticVector<StaticVector<float>*>* alldepths);
     void computeDepths(float minDepth, float maxDepth, StaticVector<StaticVector<float>*>* alldepths);
-    void computeDepthsAndResetTCams();
+    void computeDepthsAndResetTCams(int rc);
 
     StaticVector<float>* getSubDepthsForTCam(int tcamid);
 
