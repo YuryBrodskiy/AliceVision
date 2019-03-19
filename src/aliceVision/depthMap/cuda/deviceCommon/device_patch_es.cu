@@ -20,9 +20,9 @@ __device__ void computeRotCSEpip(patch& ptch, const float3& p)
 {
     ptch.p = p;
 
-    // Vector from the reference camera to the 3d point
+    // Vector from  the 3d point to the reference camera @Yury
     float3 v1 = sg_s_rC - p;
-    // Vector from the target camera to the 3d point
+    // Vector from  the 3d point to the target camera @Yury
     float3 v2 = sg_s_tC - p;
     normalize(v1);
     normalize(v2);
@@ -34,7 +34,7 @@ __device__ void computeRotCSEpip(patch& ptch, const float3& p)
     ptch.y = cross(v1, v2);
     normalize(ptch.y);
 
-    ptch.n = (v1 + v2) / 2.0f; // IMPORTANT !!!
+    ptch.n = (v1 + v2); // IMPORTANT !!! @Yury removed / 2.0f makes no sense if normalized
     normalize(ptch.n);
     // ptch.n = sg_s_rZVect; //IMPORTANT !!!
 
@@ -298,7 +298,7 @@ __device__ float compNCCby3DptsYK(patch& ptch, int wsh, int width, int height, c
        (tp.x < dd) || (tp.x > (float)(width  - 1) - dd) ||
        (tp.y < dd) || (tp.y > (float)(height - 1) - dd))
     {
-        return 1.0f;
+        return 1.0f;// this an infinity value some part of the scan window is outside of the image
     }
 
     // see CUDA_C_Programming_Guide.pdf ... E.2 pp132-133 ... adding 0.5 caises that tex2D return for point i,j exactly
@@ -318,9 +318,12 @@ __device__ float compNCCby3DptsYK(patch& ptch, int wsh, int width, int height, c
     {
         for(int xp = -wsh; xp <= wsh; xp++)
         {
+			// basic project pixel coordinates into 3 d position
             p = ptch.p + ptch.x * (float)(ptch.d * (float)xp) + ptch.y * (float)(ptch.d * (float)yp);
-            float2 rp1 = project3DPoint(sg_s_rP, p);
+			// project back to the both images
+			float2 rp1 = project3DPoint(sg_s_rP, p); //this operation is repeated wsh*2 times pre depth in wsh*2 kernels only needed ones
             float2 tp1 = project3DPoint(sg_s_tP, p) + vEpipShift;
+		
             // float2 rp1 = rp + rvLeft*(float)xp + rvUp*(float)yp;
             // float2 tp1 = tp + tvLeft*(float)xp + tvUp*((float)yp+epipShift);
 

@@ -10,16 +10,12 @@
 
 namespace aliceVision {
 namespace depthMap {
-
-inline __device__ float Euclidean(const float3 x1, const float3 x2)
+template <typename PointType> 
+inline __device__ float Euclidean( PointType x1, PointType x2)
 {
     return sqrtf((x1.x - x2.x) * (x1.x - x2.x) + (x1.y - x2.y) * (x1.y - x2.y) + (x1.z - x2.z) * (x1.z - x2.z));
 }
 
-inline __device__ float Euclidean3(const float4 x1, const float4 x2)
-{
-    return sqrtf((x1.x - x2.x) * (x1.x - x2.x) + (x1.y - x2.y) * (x1.y - x2.y) + (x1.z - x2.z) * (x1.z - x2.z));
-}
 
 //== data conversion utils ========================================================================
 
@@ -199,7 +195,7 @@ inline __device__ float CostYKfromLab(const int dx, const int dy, const float4 c
                                       const float gammaP)
 {
     // Euclidean distance in Lab, assuming linear RGB
-    const float deltaC = Euclidean3(c1, c2);
+    const float deltaC = Euclidean(c1, c2);
     // const float deltaC = fmaxf(fabs(c1.x-c2.x),fmaxf(fabs(c1.y-c2.y),fabs(c1.z-c2.z)));
 
     // spatial distance to the center of the patch (in pixels)
@@ -211,7 +207,7 @@ inline __device__ float CostYKfromLab(const int dx, const int dy, const float4 c
 inline __device__ float CostYKfromLab(const float4 c1, const float4 c2, const float gammaC)
 {
     // Euclidean distance in Lab, assuming linear RGB
-    const float deltaC = Euclidean3(c1, c2);
+    const float deltaC = Euclidean(c1, c2);
     // const float deltaC = fmaxf(fabs(c1.x-c2.x),fmaxf(fabs(c1.y-c2.y),fabs(c1.z-c2.z)));
 
     return __expf(-(deltaC / gammaC)); // Yoon & Kweon

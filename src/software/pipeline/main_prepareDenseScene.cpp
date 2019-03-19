@@ -170,15 +170,13 @@ bool prepareDenseScene(const SfMData& sfmData, const std::string& outFolder)
   SeedsPerView seedsPerView;
   retrieveSeedsPerView(sfmData, viewIds, seedsPerView);
   
-  // Export data
-  boost::progress_display my_progress_bar(viewIds.size(), std::cout, "Exporting Scene Data\n");
-
+  
   // Export views:
   //   - viewId_P.txt (Pose of the reconstructed camera)
   //   - viewId.exr (undistorted colored image)
   //   - viewId_seeds.bin (3d points visible in this image)
 
-#pragma omp parallel for num_threads(3)
+#pragma omp parallel for
   for(int i = 0; i < viewIds.size(); ++i)
   {
     auto itView = viewIds.begin();
@@ -287,8 +285,7 @@ bool prepareDenseScene(const SfMData& sfmData, const std::string& outFolder)
       }
       seedsFile.close();
     }
-   #pragma omp critical
-    ++my_progress_bar;
+
   }
 
   // Write the mvs ini file
@@ -296,7 +293,7 @@ bool prepareDenseScene(const SfMData& sfmData, const std::string& outFolder)
   os << "[global]" << os.widen('\n')
   << "ncams=" << viewIds.size() << os.widen('\n')
   << "imgExt=exr" << os.widen('\n')
-  << "verbose=TRUE" << os.widen('\n')
+  << "verbose=true" << os.widen('\n')
   << os.widen('\n')
   << "[imageResolutions]" << os.widen('\n');
 

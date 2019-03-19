@@ -399,7 +399,7 @@ __global__ void alignSourceDepthMapToTarget_kernel(
                 if((sourceDepth > 0.0f) && (targetDepth > 0.0f) && (fabs(targetDepth - sourceDepth) < maxDepthsDist))
                 {
                     float4 gcr1 = 255.0f * tex2D(r4tex, (float)(x + xp) + 0.5f, (float)(y + yp) + 0.5f);
-                    float deltaC = Euclidean3(gcr, gcr1);
+                    float deltaC = Euclidean(gcr, gcr1);
                     if(deltaC < gammaC)
                     {
                         avdist += targetDepth - sourceDepth;

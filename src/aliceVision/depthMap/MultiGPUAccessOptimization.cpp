@@ -73,33 +73,46 @@ void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtil
     SemiGlobalMatchingParams sp(mp, pc, &cps);
 
     //////////////////////////////////////////////////////////////////////////////////////////
-
+    StaticVector<int> cams_used_times;
+    cams_used_times.resize_with(mp->ncams, 0);
+    int max_use_cam = mp->_ini.get<int>("semiGlobalMatching.maxUse", 1);
+    int nnearestcams = mp->_ini.get<int>("semiGlobalMatching.maxTCams", 10);
     for(const int rc : cams)
     {
-        std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-        if(!mvsUtils::FileExists(depthMapFilepath))
+		// can be used to speed up the process substantially
+        //if(cams_used_times[rc] < max_use_cam)
         {
-            ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
-            SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
-            psgr.sgmrc();
-        }
-        else
-        {
-            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
-        }
-        std::string depthMapRefinedFilePath = sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-        if(!mvsUtils::FileExists(depthMapRefinedFilePath))
-        {
-            ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
-            RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
-            rrc.refinercCUDA();
-        }
-        else
-        {
-            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
-        }
+//             StaticVector<int> ncams = pc->findNearestCamsFromSeeds(rc, nnearestcams);
+//             for(int lc : ncams)
+//             {
+//                 cams_used_times[lc] += 1;
+//             }
+            std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+            if(!mvsUtils::FileExists(depthMapFilepath))
+            {
+                ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
+                SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
+                psgr.sgmrc();
+            }
+            else
+            {
+                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
+            }
+            std::string depthMapRefinedFilePath =
+                sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+            if(!mvsUtils::FileExists(depthMapRefinedFilePath))
+            {
+                ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
+                RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
+                rrc.refinercCUDA();
+            }
+            else
+            {
+                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
+            }
 
-        depthMap::savePointCloudXYZ(ic, rc, mp);
+            depthMap::savePointCloudXYZ(ic, rc, mp);
+        }
     }
 }
 

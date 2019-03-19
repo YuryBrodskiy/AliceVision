@@ -156,8 +156,8 @@ int main(int argc, char* argv[])
     ALICEVISION_LOG_INFO("Make Point Clouds");
     system::Timer timer_PCL;
     const int bandType = 0;
-    //  quick fix of size inconsistency
-    mvsUtils::MultiViewParams mp1(iniFilepath, outputFolder, "", false, 1);
+    // .ini and files parsing
+    mvsUtils::MultiViewParams mp1(iniFilepath, outputFolder, "", false, 4);
     mvsUtils::ImagesCache imageCache(&mp1, bandType, true);
     for(int rc : cams)
     {
@@ -187,13 +187,13 @@ int main(int argc, char* argv[])
         {
             for(int i = 0; i < sizeOfStaticVector<float>(&depthMap); i++)
             {
-                int x = i / h;
-                int y = i % h;
+                int x = i / h ;
+                int y = i % h ;
                 float depth = depthMap[i];
                 if(depth > 0.0f) 
                 {
                     //@Yury Raw point cloud ???
-                    Point3d p = mp.CArr[rc] + (mp.iCamArr[rc] * Point2d((float)x, (float)y)).normalize() * depth;
+                    Point3d p = mp.CArr[rc] + (mp.iCamArr[rc] * Point2d((float)x, (float)y)).normalize()*depth;
                     Point2d pixRC;
                     mp.getPixelFor3DPoint(&pixRC, p, rc);
                     if(!mp.isPixelInImage(pixRC, rc))

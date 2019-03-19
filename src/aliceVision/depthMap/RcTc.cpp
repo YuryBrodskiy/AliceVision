@@ -31,7 +31,7 @@ void RcTc::refineRcTcDepthSimMap(bool useTcOrRcPixSize, DepthSimMap* depthSimMap
 
     long t1 = clock();
 
-    int nParts = 4;
+    int nParts = 1;
     int wPart = w / nParts;
     for(int p = 0; p < nParts; p++)
     {

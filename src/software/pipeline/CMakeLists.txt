@@ -219,6 +219,20 @@ if(ALICEVISION_BUILD_MVS)
     )
   endif()
 
+    # Depth Map Estimation and Filtering parallelized using CUDA contexts
+  if(ALICEVISION_HAVE_CUDA) # Depth map computation need CUDA
+    alicevision_add_software(aliceVision_depthMapFull
+      SOURCE main_depthMapFull.cpp
+      FOLDER ${FOLDER_SOFTWARE_PIPELINE}
+      LINKS aliceVision_system
+            aliceVision_mvsData
+            aliceVision_mvsUtils
+            aliceVision_depthMap
+			aliceVision_fuseCut
+            ${Boost_LIBRARIES}
+    )
+  endif()
+
   # Depth Map Filtering
   alicevision_add_software(aliceVision_depthMapFiltering
     SOURCE main_depthMapFiltering.cpp

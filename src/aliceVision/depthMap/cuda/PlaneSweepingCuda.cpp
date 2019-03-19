@@ -1636,7 +1636,7 @@ float PlaneSweepingCuda::sweepPixelsToVolume(int nDepthsToSearch, StaticVector<u
         }
     }
 
-    int slicesAtTime = std::min(pixels->size(), 4096); //TODO
+    int slicesAtTime = std::min(pixels->size(), 4096); //TODO@Yury 4096 seems to be the limiting factor on the most expensive operation
     // int slicesAtTime = 480/scale;
     //int slicesAtTime = pixels->size();
 
