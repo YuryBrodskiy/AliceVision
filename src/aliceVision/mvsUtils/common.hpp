@@ -59,12 +59,12 @@ StaticVector<StaticVector<int>*>* convertObjectsCamsToCamsObjects(const MultiVie
                                                                   StaticVector<StaticVector<int>*>* ptsCams);
 StaticVector<StaticVector<Pixel>*>* convertObjectsCamsToCamsObjects(const MultiViewParams* mp,
                                                                     StaticVector<StaticVector<Pixel>*>* ptsCams);
-struct SGMParams
-{
-    int scale;
-    int step;
-    explicit SGMParams(mvsUtils::MultiViewParams* mp);
-};
+//struct SGMParams
+//{
+//    int scale;
+//    int step;
+//    explicit SGMParams(mvsUtils::MultiViewParams* mp);
+//};
 
 int computeStep(MultiViewParams* mp, int scale, int maxWidth, int maxHeight);
 

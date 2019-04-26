@@ -97,6 +97,10 @@ public:
     DelaunayGraphCut(mvsUtils::MultiViewParams* _mp);
     virtual ~DelaunayGraphCut();
 
+	void RecreateMesh(std::string filename);
+
+	void CreateAndSavePCDFile(std::vector<Point3d>* verticesCoordsPrepare, std::string outDirectory, std::string text);
+
     /// Get absolute opposite vertex index
     inline VertexIndex getOppositeVertexIndex(const Facet& f) const
     {
@@ -317,11 +321,20 @@ public:
                                 const Point3d& spaceSteps);
 
 
-    void createDensePointCloud(Point3d hexah[8], const StaticVector<int>& cams, const sfmData::SfMData* sfmData, const FuseParams* depthMapsFuseParams);
+    void createDensePointCloud(std::string outDirectory, Point3d hexah[8], const StaticVector<int>& cams, const sfmData::SfMData* sfmData, const FuseParams* depthMapsFuseParams);
     void createDensePointCloudFromPrecomputedDensePoints(Point3d hexah[8], const StaticVector<int>& cams, StaticVector<int>* voxelsIds, VoxelsGrid* ls);
 
     void createGraphCut(Point3d hexah[8], const StaticVector<int>& cams, VoxelsGrid* ls, const std::string& folderName, const std::string& tmpCamsPtsFolderName,
                         bool removeSmallSegments, const Point3d& spaceSteps);
+
+
+
+	//ALEXANDROS:
+    void RemoveOutlier(std::string outirectory);
+
+
+
+
 
     /**
      * @brief Invert full/empty status of cells if they represent a too small group after labelling.

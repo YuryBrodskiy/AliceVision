@@ -441,11 +441,10 @@ int main(int argc, char* argv[])
                       fs.divideSpaceFromSfM(sfmData, &hexah[0], estimateSpaceMinObservations, estimateSpaceMinObservationAngle);
 
                     Voxel dimensions = fs.estimateDimensions(&hexah[0], &hexah[0], 0, ocTreeDim, (meshingFromDepthMaps && !estimateSpaceFromSfM) ? nullptr : &sfmData);
-                    StaticVector<Point3d>* voxels = mvsUtils::computeVoxels(&hexah[0], dimensions);
 
+                    StaticVector<Point3d>* voxels = mvsUtils::computeVoxels(&hexah[0], dimensions);
                     StaticVector<int> voxelNeighs;
                     voxelNeighs.resize(voxels->size() / 8);
-                    ALICEVISION_LOG_INFO("voxelNeighs.size(): " << voxelNeighs.size());
 
                     for(int i = 0; i < voxelNeighs.size(); ++i)
                         voxelNeighs[i] = i;
@@ -475,12 +474,13 @@ int main(int argc, char* argv[])
                     if(cams.empty())
                         throw std::logic_error("No camera to make the reconstruction");
 
-                    delaunayGC.createDensePointCloud(&hexah[0], cams, addLandmarksToTheDensePointCloud ? &sfmData : nullptr, meshingFromDepthMaps ? &fuseParams : nullptr);
-                    if(saveRawDensePointCloud)
+                    delaunayGC.createDensePointCloud(outDirectory.string(), &hexah[0], cams, addLandmarksToTheDensePointCloud ? &sfmData : nullptr, meshingFromDepthMaps ? &fuseParams : nullptr);		//HERE THE INITIALIZATION OF VERTICES IS HAPPENING
+
+                    if(/*saveRawDensePointCloud*/ true)
                     {
                       ALICEVISION_LOG_INFO("Save dense point cloud before cut and filtering.");
                       StaticVector<StaticVector<int>*>* ptsCams = delaunayGC.createPtsCams();
-                      exportPointCloud((outDirectory/"densePointCloud_raw.abc").string(), mp, sfmData, delaunayGC._verticesCoords, *ptsCams);
+                      exportPointCloud((outDirectory/"densePointCloud_raw.ply").string(), mp, sfmData, delaunayGC._verticesCoords, *ptsCams);
                       deleteArrayOfArrays<int>(&ptsCams);
                     }
 
@@ -495,7 +495,7 @@ int main(int argc, char* argv[])
                     StaticVector<StaticVector<int>*>* ptsCams = delaunayGC.createPtsCams();
 
                     StaticVector<Point3d>* hexahsToExcludeFromResultingMesh = nullptr;
-                    mesh::meshPostProcessing(mesh, ptsCams, mp, outDirectory.string()+"/", hexahsToExcludeFromResultingMesh, &hexah[0]);
+                    mesh::meshPostProcessing(mesh, ptsCams, mp, outDirectory.string()+"/", hexahsToExcludeFromResultingMesh, &hexah[0]);	
 
                     ALICEVISION_LOG_INFO("Save dense point cloud.");
                     exportPointCloud(outputDensePointCloud, mp, sfmData, mesh->pts->getData(), *ptsCams);
@@ -507,6 +507,15 @@ int main(int argc, char* argv[])
                     delete voxels;
 
                     ALICEVISION_LOG_INFO("Save obj mesh file.");
+
+					//ALEXANDROS:										//Transformation will be applied within NaviModel
+					//Initialize transformation matrix
+                    fs::path inputDirectory = fs::path(sfmDataFilename).parent_path();
+                    std::string transformationFile = inputDirectory.string();
+                    transformationFile.append("/to_global_transformation.txt");
+                    mesh->InitializeTransformationMatrix(transformationFile);
+					//
+
                     mesh->saveToObj(outputMesh);
 
                     delete mesh;

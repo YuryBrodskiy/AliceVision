@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.3)
 project(aliceVision LANGUAGES C CXX)
 
-
 option(ALICEVISION_BUILD_DEPENDENCIES "Build all AliceVision dependencies" OFF)
 
 option(AV_BUILD_CUDA "Enable building an embedded Cuda" OFF)
@@ -78,6 +77,7 @@ if(WIN32)
 else()
   set(SCRIPT_EXTENSION sh)
 endif()
+
 
 if(ALICEVISION_BUILD_DEPENDENCIES)
 
@@ -349,7 +349,6 @@ ExternalProject_Add(${JPEG_TARGET}
        )
 SET(JPEG_CMAKE_FLAGS -DJPEG_LIBRARY=${BUILD_DIR}/turbojpeg_build/lib/libjpeg.so -DJPEG_INCLUDE_DIR=${BUILD_DIR}/turbojpeg_build/include)
 endif()
-
 
 if(AV_BUILD_LIBRAW)
 set(LIBRAW_TARGET libraw)

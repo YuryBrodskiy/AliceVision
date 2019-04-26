@@ -99,8 +99,11 @@ void readImageMetadata(const std::string& path, oiio::ParamValueList& metadata)
   ALICEVISION_LOG_DEBUG("[IO] Read Image Metadata: " << path);
   std::unique_ptr<oiio::ImageInput> in(oiio::ImageInput::open(path));
 
-  if(!in)
+  if (!in)
+  {
+      ALICEVISION_LOG_DEBUG("Can't find/open image file '" << path << "'.");
     throw std::runtime_error("Can't find/open image file '" + path + "'.");
+  }
 
   metadata = in->spec().extra_attribs;
 
@@ -130,14 +133,20 @@ void readImage(const std::string& path,
 
     oiio::ImageBuf inBuf(path, 0, 0, NULL, &configSpec);
 
-    if(!inBuf.initialized())
+	if (!inBuf.initialized())
+	{
+        ALICEVISION_LOG_DEBUG("Can't find/open image file '" << path << "'.");
         throw std::runtime_error("Can't find/open image file '" + path + "'.");
+	}
 
     const oiio::ImageSpec& inSpec = inBuf.spec();
 
     // check picture channels number
-    if(inSpec.nchannels != 1 && inSpec.nchannels < 3)
+	if (inSpec.nchannels != 1 && inSpec.nchannels < 3)
+	{
+        ALICEVISION_LOG_DEBUG("Can't load channels of image file '" << path << "'.");
         throw std::runtime_error("Can't load channels of image file '" + path + "'.");
+	}
 
     // convert to grayscale if needed
     if(nchannels == 1 && inSpec.nchannels >= 3)

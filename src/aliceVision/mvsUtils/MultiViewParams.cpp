@@ -62,6 +62,7 @@ MultiViewParams::MultiViewParams(const sfmData::SfMData& sfmData,
             continue;
 
           std::string path = view.getImagePath();
+		  //ALICEVISION_LOG_DEBUG("Image path: " << path);
 
           if(readFromDepthMaps)
           {
@@ -72,13 +73,27 @@ MultiViewParams::MultiViewParams(const sfmData::SfMData& sfmData,
             // find folder file extension
             const fs::recursive_directory_iterator end;
             const auto findIt = std::find_if(fs::recursive_directory_iterator(_imagesFolder), end,
-                                     [&view](const fs::directory_entry& e) {
-                                        return (e.path().stem() == std::to_string(view.getViewId()) &&
-                                        (isSupportedUndistortFormat(e.path().extension().string())));
-                                     });
+                                     [&view](const fs::directory_entry& e) 
+									{
+										//const char* path_buffer = view.getImagePath().c_str();
+          //                              char drive[_MAX_DRIVE];
+          //                              char dir[_MAX_DIR];
+          //                              char fname[_MAX_FNAME];
+          //                              char ext[_MAX_EXT];
 
-            if(findIt == end)
-              throw std::runtime_error("Cannot find image file " + std::to_string(view.getViewId()) + " in folder " + _imagesFolder);
+										//_splitpath(path_buffer, drive, dir, fname, ext);
+          //                              //ALICEVISION_LOG_DEBUG("FILENAME: " << fname);
+										//
+										//std::string filename = fname;
+                                        return (e.path().stem() == std::to_string(view.getViewId()) && (isSupportedUndistortFormat(e.path().extension().string())));
+                                        //return (e.path().stem() == filename && (isSupportedUndistortFormat(e.path().extension().string())));
+                                    });
+
+			if (findIt == end)
+			{
+                ALICEVISION_LOG_DEBUG("Cannot find image file " << std::to_string(view.getViewId()) << " in folder " << _imagesFolder);
+                throw std::runtime_error("Cannot find image file " + std::to_string(view.getViewId()) + " in folder " + _imagesFolder);
+			}
 
             path = _imagesFolder + std::to_string(view.getViewId()) + findIt->path().extension().string();
           }
@@ -631,8 +646,11 @@ StaticVector<int> MultiViewParams::findCamsWhichIntersectsHexahedron(const Point
         const float minDepth = metadata.get_float("AliceVision:minDepth", -1);
         const float maxDepth = metadata.get_float("AliceVision:maxDepth", -1);
 
-        if(minDepth == -1 && maxDepth == -1)
+		if (minDepth == -1 && maxDepth == -1)
+		{
+            ALICEVISION_LOG_DEBUG("Cannot find min / max depth metadata in image: " << getImagePath(rc));
           throw std::runtime_error(std::string("Cannot find min / max depth metadata in image: ") + getImagePath(rc));
+		}
 
         {
             Point3d rchex[8];

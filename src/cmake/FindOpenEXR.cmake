@@ -53,8 +53,8 @@ find_path (OPENEXR_INCLUDE_PATH OpenEXR/OpenEXRConfig.h
            PATHS ${GENERIC_INCLUDE_PATHS})
 #find_path (OPENEXR_INCLUDE_PATH OpenEXR/OpenEXRConfig.h)
 
-# message(WARNING "GENERIC_INCLUDE_PATHS: ${GENERIC_INCLUDE_PATHS}")
-# message(WARNING "Test if file exist: ${OPENEXR_INCLUDE_PATH}/OpenEXR/ImfMultiPartInputFile.h")
+ #message(WARNING "GENERIC_INCLUDE_PATHS: ${GENERIC_INCLUDE_PATHS}")
+ #message(WARNING "Test if file exist: ${OPENEXR_INCLUDE_PATH}/OpenEXR/ImfMultiPartInputFile.h")
 
 
 # Try to figure out version number

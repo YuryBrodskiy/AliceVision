@@ -19,6 +19,9 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
+#include <aliceVision/imageIO/image.hpp>
+#include <aliceVision/mvsUtils/fileIO.hpp>
+
 // These constants define the current software version.
 // They must be updated when the command line is changed.
 #define ALICEVISION_SOFTWARE_VERSION_MAJOR 2
@@ -177,5 +180,71 @@ int main(int argc, char* argv[])
       depthMap::computeNormalMaps(&mp, cams);
 
     ALICEVISION_LOG_INFO("Task done in (s): " + std::to_string(timer.elapsed()));
+
+	//Old Yury's code
+    ALICEVISION_LOG_DEBUG("Write filtered to pointcloud");
+
+	system::Timer timer_PCL;
+    const int bandType = 0;
+    // .ini and files parsing
+    mvsUtils::MultiViewParams mp1(sfmData, "", depthMapsFolder, outputFolder, false, 4);
+    mvsUtils::ImagesCache imageCache(&mp1, bandType, true);
+    for(int rc : cams)
+    {
+        imageCache.refreshData(rc);
+        //std::string xyzFileName = mv_getFileNamePrefix(mp.getDepthMapsFilterFolder(), &mp, rc) + "PCL.xyz";
+        std::string xyzFileName = mp.getDepthMapsFilterFolder();
+        xyzFileName.append(std::to_string(rc));
+        xyzFileName.append("PCL.xyz");
+        FILE* f = fopen(xyzFileName.c_str(), "w");
+        int w = mp.getWidth(rc);
+        int h = mp.getHeight(rc);
+        StaticVector<float> depthMap;
+
+        {
+            int width, height;
+            imageIO::readImage(getFileNameFromIndex(&mp, rc, mvsUtils::EFileType::depthMap, 0), width, height,
+                               depthMap.getDataWritable());
+
+            imageIO::transposeImage(width, height, depthMap.getDataWritable());
+        }
+
+        if((depthMap.empty()) || (depthMap.size() != w * h))
+        {
+            std::stringstream s;
+            s << "filterGroupsRC: bad image dimension for camera: " << mp.getViewId(rc) << "\n";
+            s << "depthMap size: " << depthMap.size() << ", width: " << w << ", height: " << h;
+            throw std::runtime_error(s.str());
+        }
+        else
+        {
+            for(int i = 0; i < sizeOfStaticVector<float>(&depthMap); i++)
+            {
+                int x = i / h;
+                int y = i % h;
+                float depth = depthMap[i];
+                if(depth > 0.0f)
+                {
+                    //@Yury Raw point cloud ???
+                    Point3d p = mp.CArr[rc] + (mp.iCamArr[rc] * Point2d((float)x, (float)y)).normalize() * depth;
+                    Point2d pixRC;
+                    mp.getPixelFor3DPoint(&pixRC, p, rc);
+                    if(!mp.isPixelInImage(pixRC, rc))
+                    {
+                    }
+                    else
+                    {
+                        Color color = imageCache.getPixelValueInterpolated(&pixRC, rc);
+                        fprintf(f, "%f %f %f %f %f %f\n", p.x, p.y, p.z, color.r * 255, color.g * 255, color.b * 255);
+                    }
+                }
+            }
+        }
+        fclose(f);
+    }
+	//
+
+	ALICEVISION_LOG_DEBUG("Finished writing the filtered pointclouds");
+
     return EXIT_SUCCESS;
 }

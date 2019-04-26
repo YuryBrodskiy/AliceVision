@@ -2,7 +2,7 @@
 ## Software
 
 add_subdirectory(pipeline)
-add_subdirectory(zmq_workers)
+
 
 if(ALICEVISION_BUILD_SFM)
   add_subdirectory(convert)

@@ -680,24 +680,24 @@ int computeStep(MultiViewParams* mp, int scale, int maxWidth, int maxHeight)
     }
     return step;
 }
-SGMParams::SGMParams(mvsUtils::MultiViewParams* mp)
-{
-    const int fileScale = 1; // input images scale (should be one)
-    scale = mp->_ini.get<int>("semiGlobalMatching.scale", -1);
-    step = mp->_ini.get<int>("semiGlobalMatching.step", -1);
-
-    if(scale == -1)
-    {
-        // Compute the number of scales that will be used in the plane sweeping.
-        // The highest scale should have a minimum resolution of 700x550.
-        int width = mp->getMaxImageWidth();
-        int height = mp->getMaxImageHeight();
-        int scaleTmp = computeStep(mp, fileScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
-        scale = std::min(2, scaleTmp);
-        step = computeStep(mp, fileScale * scale, (width > height ? 700 : 550), (width > height ? 550 : 700));
-        ALICEVISION_LOG_INFO("PSSGM autoScaleStep: scale: " << scale << ", step: " << step);
-    }
-}
+//SGMParams::SGMParams(mvsUtils::MultiViewParams* mp)
+//{
+//    const int fileScale = 1; // input images scale (should be one)
+//    scale = mp->inp.get<int>("semiGlobalMatching.scale", -1);
+//    step = mp->_ini.get<int>("semiGlobalMatching.step", -1);
+//
+//    if(scale == -1)
+//    {
+//        // Compute the number of scales that will be used in the plane sweeping.
+//        // The highest scale should have a minimum resolution of 700x550.
+//        int width = mp->getMaxImageWidth();
+//        int height = mp->getMaxImageHeight();
+//        int scaleTmp = computeStep(mp, fileScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
+//        scale = std::min(2, scaleTmp);
+//        step = computeStep(mp, fileScale * scale, (width > height ? 700 : 550), (width > height ? 550 : 700));
+//        ALICEVISION_LOG_INFO("PSSGM autoScaleStep: scale: " << scale << ", step: " << step);
+//    }
+//}
 
 StaticVector<Point3d>* computeVoxels(const Point3d* space, const Voxel& dimensions)
 {

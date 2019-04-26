@@ -107,8 +107,15 @@ public:
     StaticVector<Mesh::triangle>* tris = nullptr;
     Matrix3x4 transformGlobal;
 
+	//ALEXANDROS:
+    double transformationMatrix[16];
+	//
+
     Mesh();
     ~Mesh();
+
+	Point3d ApplyTransformation(Point3d pt);
+	void InitializeTransformationMatrix(const std::string& filename);
 
     void saveToObj(const std::string& filename);
 

@@ -25,5 +25,8 @@ bool savePLY(const sfmData::SfMData& sfmData,
              const std::string& filename,
              ESfMData partFlag);
 
+
+bool savePCD(const sfmData::SfMData& sfmData, const std::string& filename, ESfMData partFlag);
+
 } // namespace sfmDataIO
 } // namespace aliceVision
