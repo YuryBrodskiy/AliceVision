@@ -9,10 +9,8 @@
 #include <aliceVision/mvsData/StaticVector.hpp>
 #include <aliceVision/depthMap/SemiGlobalMatchingParams.hpp>
 
-namespace aliceVision
-{
-namespace depthMap
-{
+namespace aliceVision {
+namespace depthMap {
 
 class SemiGlobalMatchingVolume
 {
@@ -22,80 +20,39 @@ public:
 
     void copyVolume(const StaticVector<int>* volume);
     void copyVolume(const StaticVector<unsigned char>* volume, int zFrom, int nZSteps);
-
-    void SemiGlobalMatchingVolume::copyVolume(const thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* volume, int zFrom, int nZSteps);
-
     void addVolumeMin(const StaticVector<unsigned char>* volume, int zFrom, int nZSteps);
     void addVolumeSecondMin(const StaticVector<unsigned char>* volume, int zFrom, int nZSteps);
-
-	void SemiGlobalMatchingVolume::addVolumeSecondMin(const thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* volume, int zFrom, int nZSteps);
-
     void addVolumeAvg(int n, const StaticVector<unsigned char>* volume, int zFrom, int nZSteps);
 
     void cloneVolumeStepZ();
-    void cloneVolumeSecondStepZ(int rc);
-
-	void SemiGlobalMatchingVolume::cloneVolumeSecondStepZPinnedMemory(int rc);
+    void cloneVolumeSecondStepZ();
 
     void SGMoptimizeVolumeStepZ(int rc, int volStepXY, int volLUX, int volLUY, int scale);
-
-	void SemiGlobalMatchingVolume::SGMoptimizeVolumeStepZPinnedMemory(int rc, int volStepXY, int volLUX, int volLUY, int scale);
-
-
     StaticVector<IdValue>* getOrigVolumeBestIdValFromVolumeStepZ(int zborder);
 
-
-	StaticVector<IdValue>* SemiGlobalMatchingVolume::getOrigVolumeBestIdValFromVolumeStepZPinnedMemory(int zborder);
-
-	void WriteVolumeStepBestToFilePinnedMemory(int rc);
-
-	void WriteVolumeStepBestToFile(int rc);
-
-
-	void SemiGlobalMatchingVolume::WriteOptimizeVolumeToFilePinned(int rc, thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* _volumeStepZPinnedMemory);
-
-	void SemiGlobalMatchingVolume::WriteOptimizeVolumeToFile(int rc, StaticVector<unsigned char>* _volumeStepZ);
-
-	StaticVector<IdValue>* SemiGlobalMatchingVolume::getOrigVolumeBestIdValFromVolumeStepZPinned(int zborder);
-
-
-
-
+    void exportVolume(StaticVector<float>& depths, int camIndex, int scale, int step, const std::string& filepath) const;
+    void exportVolumeStep(StaticVector<float>& depths, int camIndex, int scale, int step, const std::string& filepath) const;
+    void export9PCSV(StaticVector<float>& depths, int camIndex,  int scale, int step, const std::string& name, const std::string& filepath) const;
 
 private:
     SemiGlobalMatchingParams* sp;
 
     float volGpuMB;
-    int volDimX;
-    int volDimY;
-    int volDimZ;
-    int volStepZ;
+    int   volDimX;
+    int   volDimY;
+    int   volDimZ;
+    int   volStepZ;
 
     /// Volume containing the second best value accross multiple input volumes
     StaticVector<unsigned char>* _volumeSecondBest;
 
-
-	thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* _volumeSecondBestPinnedMmeory;
-
-
     /// Volume containing the best value accross multiple input volumes
     StaticVector<unsigned char>* _volume;
 
-	/// Volume containing the best value accros multiple input volumes but the vector has been allocated in pinned memory
-	thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* volumePinnedMemory;
-
     /// The similarity volume after Z reduction. Volume dimension is (X, Y, Z/step).
     StaticVector<unsigned char>* _volumeStepZ;
-
-
-	thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>* _volumeStepZPinnedMemory;
-
-
     /// Volume with the index of the original plane. Volume dimension (X, Y, Z/step).
     StaticVector<int>* _volumeBestZ;
-
-
-	thrust::host_vector<int, thrust::cuda::experimental::pinned_allocator<int>>* _volumeBestZPinnedMemory;
 };
 
 } // namespace depthMap

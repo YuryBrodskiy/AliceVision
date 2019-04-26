@@ -157,6 +157,12 @@ void AlembicExporter::DataImpl::addCamera(const std::string& name,
     OUInt32Property(userProps, "mvg_subPoseId").set(view.getSubPoseId());
   }
 
+  if(view.getFrameId() != UndefinedIndexT)
+    OUInt32Property(userProps, "mvg_frameId").set(view.getFrameId());
+
+  if(view.isPoseIndependant() == false)
+    OBoolProperty(userProps, "mvg_poseIndependant").set(view.isPoseIndependant());
+
   // set view metadata
   {
     std::vector<std::string> rawMetadata(view.getMetadata().size() * 2);
@@ -185,8 +191,8 @@ void AlembicExporter::DataImpl::addCamera(const std::string& name,
     // We chose a full frame 24x36 camera
     float sensorWidthMM = 36.0;
 
-    if(view.hasMetadata("sensor_width"))
-      sensorWidthMM = std::stof(view.getMetadata("sensor_width"));
+    if(view.hasMetadata("AliceVision:SensorWidth"))
+      sensorWidthMM = std::stof(view.getMetadata("AliceVision:SensorWidth"));
 
     // Take the max of the image size to handle the case where the image is in portrait mode
     const float imgWidth = pinhole->w();
@@ -211,6 +217,7 @@ void AlembicExporter::DataImpl::addCamera(const std::string& name,
 
     OUInt32ArrayProperty(userProps, "mvg_sensorSizePix").set(sensorSize_pix);
     OStringProperty(userProps, "mvg_intrinsicType").set(pinhole->getTypeStr());
+    OStringProperty(userProps, "mvg_intrinsicInitializationMode").set(camera::EIntrinsicInitMode_enumToString(pinhole->getInitializationMode()));
     ODoubleProperty(userProps, "mvg_initialFocalLengthPix").set(pinhole->initialFocalLengthPix());
     ODoubleArrayProperty(userProps, "mvg_intrinsicParams").set(pinhole->getParams());
     OBoolProperty(userProps, "mvg_intrinsicLocked").set(pinhole->isLocked());
@@ -256,7 +263,7 @@ void AlembicExporter::addSfM(const sfmData::SfMData& sfmData, ESfMData flagsPart
 
     addLandmarks(sfmData.getLandmarks(),
               (flagsPart & ESfMData::LANDMARKS_UNCERTAINTY) ? sfmData._landmarksUncertainty : noUncertainty,
-              (flagsPart & ESfMData::OBSERVATIONS));
+              ((flagsPart & ESfMData::OBSERVATIONS || flagsPart & ESfMData::OBSERVATIONS_WITH_FEATURES)), (flagsPart & ESfMData::OBSERVATIONS_WITH_FEATURES));
   }
 
   if(flagsPart & ESfMData::VIEWS ||
@@ -269,7 +276,7 @@ void AlembicExporter::addSfM(const sfmData::SfMData& sfmData, ESfMData flagsPart
     {
       const sfmData::View& view = *(viewPair.second);
 
-      if(view.isPartOfRig())
+      if(view.isPartOfRig() && !view.isPoseIndependant())
       {
         // save rigId, poseId, viewId in a temporary structure, will process later
         rigsViewIds[view.getRigId()][view.getPoseId()].push_back(view.getViewId());
@@ -279,11 +286,10 @@ void AlembicExporter::addSfM(const sfmData::SfMData& sfmData, ESfMData flagsPart
     }
 
     // save rigs views
-    for(const auto& rigPair : sfmData.getRigs())
+    for(const auto& rigPair : rigsViewIds)
     {
-      const IndexT rigId = rigPair.first;
-      for(const auto& poseViewIds : rigsViewIds.at(rigId))
-        addSfMCameraRig(sfmData, rigId, poseViewIds.second); // add one camera rig per rig pose
+      for(const auto& poseViewIds : rigPair.second)
+        addSfMCameraRig(sfmData, rigPair.first, poseViewIds.second); // add one camera rig per rig pose
     }
   }
 }
@@ -304,10 +310,6 @@ void AlembicExporter::addSfMCameraRig(const sfmData::SfMData& sfmData, IndexT ri
 {
   const sfmData::Rig& rig = sfmData.getRigs().at(rigId);
   const std::size_t nbSubPoses = rig.getNbSubPoses();
-  if(viewIds.size() != rig.getNbSubPoses())
-    throw std::runtime_error("Can't save rig " + std::to_string(rigId) + " in " + getFilename()
-                             + ":\n\t- # sub-poses in rig structure: " + std::to_string(nbSubPoses)
-                             + "\n\t- # sub-poses find in views: " + std::to_string(viewIds.size()));
 
   const sfmData::View& firstView = *(sfmData.getViews().at(viewIds.front()));
 
@@ -385,7 +387,7 @@ void AlembicExporter::addSfMCameraRig(const sfmData::SfMData& sfmData, IndexT ri
   }
 }
 
-void AlembicExporter::addLandmarks(const sfmData::Landmarks& landmarks, const sfmData::LandmarksUncertainty& landmarksUncertainty, bool withVisibility)
+void AlembicExporter::addLandmarks(const sfmData::Landmarks& landmarks, const sfmData::LandmarksUncertainty& landmarksUncertainty, bool withVisibility, bool withFeatures)
 {
   if(landmarks.empty())
     return;
@@ -440,29 +442,47 @@ void AlembicExporter::addLandmarks(const sfmData::Landmarks& landmarks, const sf
 
     // Use std::vector<::uint32_t> and std::vector<float> instead of std::vector<V2i> and std::vector<V2f>
     // Because Maya don't import them correctly
-    std::vector<::uint32_t> visibilityIds;
-    visibilityIds.reserve(nbObservations*2);
-    std::vector<float>featPos2d;
-    featPos2d.reserve(nbObservations*2);
+    std::vector<::uint32_t> visibilityViewId;
+    std::vector<::uint32_t> visibilityFeatId;
+    visibilityViewId.reserve(nbObservations);
 
-    for (const auto &landmark : landmarks)
+    std::vector<float>featPos2d;
+    if(withFeatures)
+    {
+      featPos2d.reserve(nbObservations*2);
+      visibilityFeatId.reserve(nbObservations);
+    }
+
+    for (const auto& landmark : landmarks)
     {
       const sfmData::Observations& observations = landmark.second.observations;
       for(const auto& vObs: observations )
       {
         const sfmData::Observation& obs = vObs.second;
-        // (View ID, Feature ID)
-        visibilityIds.emplace_back(vObs.first);
-        visibilityIds.emplace_back(obs.id_feat);
-        // Feature 2D position (x, y))
-        featPos2d.emplace_back(obs.x[0]);
-        featPos2d.emplace_back(obs.x[1]);
+
+        // viewId
+        visibilityViewId.emplace_back(vObs.first);
+
+        if(withFeatures)
+        {
+          // featureId
+          visibilityFeatId.emplace_back(obs.id_feat);
+
+          // feature 2D position (x, y))
+          featPos2d.emplace_back(obs.x[0]);
+          featPos2d.emplace_back(obs.x[1]);
+        }
       }
     }
 
     OUInt32ArrayProperty(userProps, "mvg_visibilitySize" ).set(visibilitySize);
-    OUInt32ArrayProperty(userProps, "mvg_visibilityIds" ).set(visibilityIds); // (viewID, featID)
-    OFloatArrayProperty(userProps, "mvg_visibilityFeatPos" ).set(featPos2d); // feature position (x,y)
+    OUInt32ArrayProperty(userProps, "mvg_visibilityViewId" ).set(visibilityViewId);
+
+    if(withFeatures)
+    {
+      OUInt32ArrayProperty(userProps, "mvg_visibilityFeatId" ).set(visibilityFeatId);
+      OFloatArrayProperty(userProps, "mvg_visibilityFeatPos" ).set(featPos2d); // feature position (x,y)
+    }
   }
   if(!landmarksUncertainty.empty())
   {

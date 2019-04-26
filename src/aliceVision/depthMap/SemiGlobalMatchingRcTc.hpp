@@ -10,37 +10,32 @@
 #include <aliceVision/mvsData/Voxel.hpp>
 #include <aliceVision/depthMap/SemiGlobalMatchingParams.hpp>
 
-#include <cuda_runtime.h>
-#include <thrust/host_vector.h>
-#include <thrust/system/cuda/experimental/pinned_allocator.h>
-
-namespace aliceVision
-{
-namespace depthMap
-{
+namespace aliceVision {
+namespace depthMap {
 
 class SemiGlobalMatchingRcTc
 {
 public:
-    SemiGlobalMatchingRcTc(StaticVector<float>* _rcTcDepths, int _rc, int _tc, int _scale, int _step,
-                           SemiGlobalMatchingParams* _sp, StaticVectorBool* _rcSilhoueteMap = NULL);
+    SemiGlobalMatchingRcTc(const std::vector<float>& _rcTcDepths, int _rc, int _tc, int _scale, int _step, SemiGlobalMatchingParams* _sp,
+                StaticVectorBool* _rcSilhoueteMap = NULL);
     ~SemiGlobalMatchingRcTc(void);
 
     StaticVector<unsigned char>* computeDepthSimMapVolume(float& volumeMBinGPUMem, int wsh, float gammaC, float gammaP);
 
-    thrust::host_vector<unsigned char, thrust::cuda::experimental::pinned_allocator<unsigned char>>*
-    SemiGlobalMatchingRcTc::computeDepthSimMapVolumeMemoryPinned(float& volumeMBinGPUMem, int wsh, float gammaC,
-                                                                 float gammaP, cudaStream_t &stream);
-
 private:
     StaticVector<Voxel>* getPixels();
+    const SemiGlobalMatchingParams* const sp;
 
-    SemiGlobalMatchingParams* sp;
+    const int rc;
 
-    int rc, tc, scale, step;
-    StaticVector<float>* rcTcDepths;
+    int tc;
+    const std::vector<float> rcTcDepths;
+    const int _scale;
+    const int _step;
+    const int _w;
+    const int _h;
     float epipShift;
-    int w, h;
+    // int w, h;
     StaticVectorBool* rcSilhoueteMap;
 };
 

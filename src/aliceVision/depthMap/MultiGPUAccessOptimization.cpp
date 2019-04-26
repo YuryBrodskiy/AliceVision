@@ -26,9 +26,8 @@ void savePointCloudXYZ(mvsUtils::ImagesCache& imageCache, int rc, mvsUtils::Mult
 
     {
         int width, height;
-        imageIO::readImage(mv_getFileName(mp, rc, mvsUtils::EFileType::depthMap, 1), width, height,
-                           depthMap.getDataWritable());
-        imageIO::transposeImage(width, height, depthMap.getDataWritable());
+        imageIO::readImage(mv_getFileName(mp, rc, mvsUtils::EFileType::depthMap, 1), width, height, depthMap.getDataWritable());
+		imageIO::transposeImage(width, height, depthMap.getDataWritable());
     }
 
     if((depthMap.empty()) || (depthMap.size() != w * h))
@@ -61,58 +60,8 @@ void savePointCloudXYZ(mvsUtils::ImagesCache& imageCache, int rc, mvsUtils::Mult
     fclose(f);
 }
 
-void processImageStreamParallel(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams)
-{
 
-	aliceVision::mvsUtils::SGMParams sgmParamsForScaleAndStep(mp);
-    const int bandType = 0;
-    // load images from files into RAM
-    mvsUtils::ImagesCache imagesCache(mp, bandType, true);
-    // load stuff on GPU memory and creates multi-level images and computes gradients
-    PlaneSweepingCuda planeSweepingCUDA(CUDADeviceNo, &imagesCache, mp, pc, sgmParamsForScaleAndStep.scale, cams); // ToDo add cameras to load		//The assigning of GPU device is happening inside here
-    // init plane sweeping parameters
-    SemiGlobalMatchingParams sp(mp, pc, &planeSweepingCUDA);
-
-	omp_set_num_threads(32);		//The GPUs we are using are up to 32 kernels concurrently so that's why I am choosing 32 subthreads on those 2 threads
-
-	#pragma omp parallel for
-	for (int i = 0; i < cams.size(); i++)
-	{
-        int referenceImage = cams[i];
-
-		//Create a stream on each thread for concurrent process in GPU
-        cudaStream_t stream;
-        cudaStreamCreate(&stream);
-
-		//COMPUTE DEPTH MAP
-
-		std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(referenceImage), sgmParamsForScaleAndStep.scale, sgmParamsForScaleAndStep.step);
-        if(!mvsUtils::FileExists(depthMapFilepath))
-        {
-            ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
-
-            // IT COMPUTES ANYTHING THAT HAS TO DO WITH DEPTHS INSIDE (THE ACTUALL DEPTHS, WHICH TO SEARCH ETC)
-            SemiGlobalMatchingRc sgmReferenceImage(true, referenceImage, sgmParamsForScaleAndStep.scale, sgmParamsForScaleAndStep.step, &sp);	//PARALLEL OK!!!
-
-
-			sgmReferenceImage.sgmrc(stream);		//Running it in parallel while using 2 GPUs (No concurrent kernels and transfer between pinned memory though) is WORKING FINE. But performance is not so greater (max 2s gain)
-        }
-        else
-        {
-            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
-        }
-
-
-
-		//REFINE DEPTH MAP
-
-		
-		cudaStreamDestroy(stream);
-	}
-}
-
-void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc,
-                        const StaticVector<int>& cams)
+void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const StaticVector<int>& cams)
 {
     aliceVision::mvsUtils::SGMParams sgm(mp);
     const int bandType = 0;
@@ -124,33 +73,46 @@ void processImageStream(int CUDADeviceNo, mvsUtils::MultiViewParams* mp, mvsUtil
     SemiGlobalMatchingParams sp(mp, pc, &cps);
 
     //////////////////////////////////////////////////////////////////////////////////////////
-
+    StaticVector<int> cams_used_times;
+    cams_used_times.resize_with(mp->ncams, 0);
+    int max_use_cam = mp->_ini.get<int>("semiGlobalMatching.maxUse", 1);
+    int nnearestcams = mp->_ini.get<int>("semiGlobalMatching.maxTCams", 10);
     for(const int rc : cams)
     {
-        std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-        if(!mvsUtils::FileExists(depthMapFilepath))
+		// can be used to speed up the process substantially
+        //if(cams_used_times[rc] < max_use_cam)
         {
-            ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
-            SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
-            psgr.sgmrc();
-        }
-        else
-        {
-            ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
-        }
-        //std::string depthMapRefinedFilePath = sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
-        //if(!mvsUtils::FileExists(depthMapRefinedFilePath))
-        //{
-        //    ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
-        //    RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
-        //    rrc.refinercCUDA();
-        //}
-        //else
-        //{
-        //    ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
-        //}
+//             StaticVector<int> ncams = pc->findNearestCamsFromSeeds(rc, nnearestcams);
+//             for(int lc : ncams)
+//             {
+//                 cams_used_times[lc] += 1;
+//             }
+            std::string depthMapFilepath = sp.getSGM_idDepthMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+            if(!mvsUtils::FileExists(depthMapFilepath))
+            {
+                ALICEVISION_LOG_INFO("Compute depth map: " << depthMapFilepath);
+                SemiGlobalMatchingRc psgr(true, rc, sgm.scale, sgm.step, &sp);
+                psgr.sgmrc();
+            }
+            else
+            {
+                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapFilepath);
+            }
+            std::string depthMapRefinedFilePath =
+                sp.getREFINE_opt_simMapFileName(mp->getViewId(rc), sgm.scale, sgm.step);
+            if(!mvsUtils::FileExists(depthMapRefinedFilePath))
+            {
+                ALICEVISION_LOG_INFO("Refine depth map: " << depthMapRefinedFilePath);
+                RefineRc rrc(rc, sgm.scale, sgm.step, &sp);
+                rrc.refinercCUDA();
+            }
+            else
+            {
+                ALICEVISION_LOG_INFO("Depth map already computed: " << depthMapRefinedFilePath);
+            }
 
-        //depthMap::savePointCloudXYZ(ic, rc, mp);
+            depthMap::savePointCloudXYZ(ic, rc, mp);
+        }
     }
 }
 
@@ -161,7 +123,7 @@ void doOnGPUs(mvsUtils::MultiViewParams* mp, mvsUtils::PreMatchCams* pc, const S
     ALICEVISION_LOG_INFO("Number of GPU devices: " << num_gpus << ", number of CPU threads: " << num_cpu_threads);
     int numthreads = std::min(num_gpus, num_cpu_threads);
 
-    int num_gpus_to_use = mp->_ini.get<int>("refineRc.num_gpus_to_use", 2);
+    int num_gpus_to_use = mp->_ini.get<int>("refineRc.num_gpus_to_use", 1);
     if(num_gpus_to_use > 0)
     {
         numthreads = num_gpus_to_use;

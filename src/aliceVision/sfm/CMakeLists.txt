@@ -10,6 +10,7 @@ set(sfm_files_headers
   pipeline/localization/SfMLocalizationSingle3DTrackObservationDatabase.hpp
   pipeline/sequential/ReconstructionEngine_sequentialSfM.hpp
   pipeline/ReconstructionEngine.hpp
+  pipeline/RigSequence.hpp
   pipeline/pairwiseMatchesIO.hpp
   pipeline/RelativePoseInfo.hpp
   pipeline/structureFromKnownPoses/StructureEstimationFromKnownPoses.hpp
@@ -19,11 +20,9 @@ set(sfm_files_headers
   utils/syntheticScene.hpp
   BundleAdjustment.hpp
   BundleAdjustmentCeres.hpp
-  LocalBundleAdjustmentCeres.hpp
-  LocalBundleAdjustmentData.hpp
+  LocalBundleAdjustmentGraph.hpp
   FrustumFilter.hpp
   ResidualErrorFunctor.hpp
-  colorizeTracks.hpp
   filters.hpp
   generateReport.hpp
   sfm.hpp
@@ -39,6 +38,7 @@ set(sfm_files_sources
   pipeline/localization/SfMLocalizer.cpp
   pipeline/localization/SfMLocalizationSingle3DTrackObservationDatabase.cpp
   pipeline/sequential/ReconstructionEngine_sequentialSfM.cpp
+  pipeline/RigSequence.cpp
   pipeline/RelativePoseInfo.cpp
   pipeline/structureFromKnownPoses/StructureEstimationFromKnownPoses.cpp
   pipeline/regionsIO.cpp
@@ -46,10 +46,8 @@ set(sfm_files_sources
   utils/statistics.cpp
   utils/syntheticScene.cpp
   BundleAdjustmentCeres.cpp
-  LocalBundleAdjustmentCeres.cpp
-  LocalBundleAdjustmentData.cpp
+  LocalBundleAdjustmentGraph.cpp
   FrustumFilter.cpp
-  colorizeTracks.cpp
   generateReport.cpp
   sfmFilters.cpp
   sfmTriangulation.cpp

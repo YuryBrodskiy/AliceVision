@@ -27,7 +27,12 @@ bool Datasheet::operator==(const Datasheet& other) const
   brandA.erase(std::remove_if(brandA.begin(), brandA.end(), ::ispunct), brandA.end()); //remove punctuation
   brandB.erase(std::remove_if(brandB.begin(), brandB.end(), ::ispunct), brandB.end()); //remove punctuation
 
-  if(brandA == brandB)
+  brandA.erase(std::remove_if(brandA.begin(), brandA.end(), ::isspace), brandA.end()); //remove spaces
+  brandB.erase(std::remove_if(brandB.begin(), brandB.end(), ::isspace), brandB.end()); //remove spaces
+
+  if((brandA == brandB) ||
+     (boost::algorithm::starts_with(brandA, brandB)) ||
+     (boost::algorithm::starts_with(brandB, brandA)))
   {
     std::string modelA = _model;
     std::string modelB = other._model;
@@ -37,6 +42,9 @@ bool Datasheet::operator==(const Datasheet& other) const
 
     modelA.erase(std::remove_if(modelA.begin(), modelA.end(), ::ispunct), modelA.end()); //remove punctuation
     modelB.erase(std::remove_if(modelB.begin(), modelB.end(), ::ispunct), modelB.end()); //remove punctuation
+
+    modelA.erase(std::remove_if(modelA.begin(), modelA.end(), ::isspace), modelA.end()); //remove spaces
+    modelB.erase(std::remove_if(modelB.begin(), modelB.end(), ::isspace), modelB.end()); //remove spaces
 
     if((modelA == modelB) ||
        (boost::algorithm::ends_with(modelA, modelB)) ||

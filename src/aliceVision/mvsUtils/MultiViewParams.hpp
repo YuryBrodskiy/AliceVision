@@ -10,16 +10,23 @@
 #include <aliceVision/mvsData/Point2d.hpp>
 #include <aliceVision/mvsData/Point3d.hpp>
 #include <aliceVision/mvsData/Pixel.hpp>
-#include <aliceVision/mvsData/SeedPointCams.hpp>
 #include <aliceVision/mvsData/StaticVector.hpp>
 #include <aliceVision/mvsData/structures.hpp>
 
 #include <boost/property_tree/ptree.hpp>
 
-#include <vector>
 #include <string>
+#include <vector>
+#include <map>
 
 namespace aliceVision {
+
+namespace bpt = boost::property_tree;
+
+namespace sfmData {
+class SfMData;
+} // namespace sfmData
+
 namespace mvsUtils {
 
 enum class EFileType {
@@ -32,16 +39,12 @@ enum class EFileType {
     iP = 6,
     har = 7,
     prematched = 8,
-    seeds = 9,
     growed = 10,
     op = 11,
     occMap = 12,
     wshed = 13,
     nearMap = 14,
-    seeds_prm = 15,
-    seeds_flt = 16,
     img = 17,
-    seeds_seg = 18,
     graphCutMap = 20,
     graphCutPts = 21,
     growedMap = 22,
@@ -60,20 +63,18 @@ enum class EFileType {
     depthMap = 35,
     simMap = 36,
     mapPtsTmp = 37,
-    depthMapInfo = 38,
     camMap = 39,
     mapPtsSimsTmp = 40,
     nmodMap = 41,
     D = 42,
+    normalMap = 43,
 };
 
 class MultiViewParams
 {
 public:
     /// prepareDenseScene data
-    std::string mvDir;
-    /// global data prefix
-    std::string prefix;
+    std::string _imagesFolder;
     /// camera projection matrix P
     std::vector<Matrix3x4> camArr;
     /// camera intrinsics matrix K: [focalx skew u; 0 focaly v; 0 0 1]
@@ -92,23 +93,32 @@ public:
     std::vector<Point3d> FocK1K2Arr;
     /// number of cameras
     int ncams;
-    /// cuda device id
-    int CUDADeviceNo;
     ///
     float simThr;
     int g_border = 2;
     bool verbose;
 
-    boost::property_tree::ptree _ini;
+    boost::property_tree::ptree userParams;
 
-    MultiViewParams(const std::string& iniFile,
-                    const std::string& depthMapFolder = "",
-                    const std::string& depthMapFilterFolder = "",
+    MultiViewParams(const sfmData::SfMData& sfmData,
+                    const std::string& imagesFolder = "",
+                    const std::string& depthMapsFolder = "",
+                    const std::string& depthMapsFilterFolder = "",
                     bool readFromDepthMaps = false,
                     int downscale = 1,
                     StaticVector<CameraMatrices>* cameras = nullptr);
 
     ~MultiViewParams();
+
+    inline Point3d backproject(const int camIndex, const Point2d& pix, double depth) const
+    {
+        const Point3d p = CArr[camIndex] + (iCamArr[camIndex] * pix).normalize() * depth;
+        return p;
+    }
+    inline const std::string& getImagePath(int index) const
+    {
+        return _imagesParams.at(index).path;
+    }
 
     inline int getViewId(int index) const
     {
@@ -144,11 +154,13 @@ public:
     {
         return _imagesParams.at(index).size / getDownscaleFactor(index);
     }
-    inline const std::vector<imageParams>& getImagesParams() const
+
+    inline const std::vector<ImageParams>& getImagesParams() const
     {
         return _imagesParams;
     }
-    inline const imageParams& getImageParams(int i) const
+
+    inline const ImageParams& getImageParams(int i) const
     {
         return _imagesParams.at(i);
     }
@@ -178,6 +190,21 @@ public:
         return _imagesParams.size();
     }
 
+    inline int getIndexFromViewId(IndexT viewId) const
+    {
+        return _imageIdsPerViewId.at(viewId);
+    }
+
+    inline float getMinViewAngle() const
+    {
+        return _minViewAngle;
+    }
+
+    inline float getMaxViewAngle() const
+    {
+        return _maxViewAngle;
+    }
+
     inline std::vector<double> getOriginalP(int index) const
     {
         std::vector<double> p44; // projection matrix (4x4) scale 1
@@ -192,22 +219,26 @@ public:
         return p44;
     }
 
-    inline const std::string& getImageExtension() const
+    inline const std::string& getDepthMapsFolder() const
     {
-        return _imageExt;
+        return _depthMapsFolder;
     }
 
-    inline const std::string& getDepthMapFolder() const
+    inline const std::string& getDepthMapsFilterFolder() const
     {
-        return _depthMapFolder;
+        return _depthMapsFilterFolder;
     }
 
-    inline const std::string& getDepthMapFilterFolder() const
+    inline const sfmData::SfMData& getInputSfMData() const
     {
-        return _depthMapFilterFolder;
+        return _sfmData;
     }
+
+    const std::map<std::string, std::string>& getMetadata(int index) const;
 
     bool is3DPointInFrontOfCam(const Point3d* X, int rc) const;
+
+    void getMinMaxMidNbDepth(int index, float& min, float& max, float& mid, std::size_t& nbDepths, float percentile = 0.999f) const;
     void getPixelFor3DPoint(Point2d* out, const Point3d& X, const Matrix3x4& P) const;
     void getPixelFor3DPoint(Point2d* out, const Point3d& X, int rc) const;
     void getPixelFor3DPoint(Pixel* out, const Point3d& X, int rc) const;
@@ -225,9 +256,45 @@ public:
     bool isPixelInImage(const Point2d& pix, int camId) const;
     void decomposeProjectionMatrix(Point3d& Co, Matrix3x3& Ro, Matrix3x3& iRo, Matrix3x3& Ko, Matrix3x3& iKo, Matrix3x3& iPo, const Matrix3x4& P) const;
 
+    /**
+     * @brief findCamsWhichIntersectsHexahedron
+     * @param hexah 0-3 frontal face, 4-7 back face
+     * @param minMaxDepthsFileName
+     * @return
+     */
+    StaticVector<int> findCamsWhichIntersectsHexahedron(const Point3d hexah[8], const std::string& minMaxDepthsFileName) const;
+
+    /**
+     * @brief findCamsWhichIntersectsHexahedron
+     * @param hexah 0-3 frontal face, 4-7 back face
+     * @return
+     */
+    StaticVector<int> findCamsWhichIntersectsHexahedron(const Point3d hexah[8]) const;
+
+    /**
+     * @brief findNearestCamsFromLandmarks
+     * @param rc
+     * @param nbNearestCams
+     * @return
+     */
+    StaticVector<int> findNearestCamsFromLandmarks(int rc, int nbNearestCams) const;
+
+
+    inline void setMinViewAngle(float minViewAngle)
+    {
+      _minViewAngle = minViewAngle;
+    }
+
+    inline void setMaxViewAngle(float maxViewAngle)
+    {
+      _maxViewAngle = maxViewAngle;
+    }
+
 private:
     /// image params list (width, height, size)
-    std::vector<imageParams> _imagesParams;
+    std::vector<ImageParams> _imagesParams;
+    /// image id per view id
+    std::map<IndexT, int> _imageIdsPerViewId;
     /// image scale list
     std::vector<int> _imagesScale;
     /// downscale apply to input images during process
@@ -236,17 +303,22 @@ private:
     int _maxImageWidth = 0;
     /// maximum height
     int _maxImageHeight = 0;
-    /// images extension
-    std::string _imageExt = ".exr";
     /// depthMapEstimate data folder
-    std::string _depthMapFolder;
+    std::string _depthMapsFolder;
     /// depthMapFilter data folder
-    std::string _depthMapFilterFolder;
+    std::string _depthMapsFilterFolder;
     /// use silhouettes
     bool _useSil = false;
+    /// minimum view angle
+    float _minViewAngle = 2.0f;
+    /// maximum view angle
+    float _maxViewAngle = 70.0f;  // WARNING: may be too low, especially when using seeds from SfM
+    /// input sfmData
+    const sfmData::SfMData& _sfmData;
 
-    void initFromConfigFile(const std::string& iniFile);
-    void loadCameraFile(int i, const std::string& fileNameP, const std::string& fileNameD);
+    void loadMatricesFromTxtFile(int index, const std::string& fileNameP, const std::string& fileNameD);
+    void loadMatricesFromRawProjectionMatrix(int index, const double* rawProjMatix);
+    void loadMatricesFromSfM(int index);
 
     inline void resizeCams(int _ncams)
     {

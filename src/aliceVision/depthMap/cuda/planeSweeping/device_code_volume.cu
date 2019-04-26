@@ -319,7 +319,7 @@ __global__ void volume_agregateCostVolumeAtZinSlices_kernel(unsigned int* xySlic
             int imY1 = volLUY + (dimTrnX == 0) ? z1 : vx;
             float4 gcr0 = 255.0f * tex2D(r4tex, (float)imX0 + 0.5f, (float)imY0 + 0.5f);
             float4 gcr1 = 255.0f * tex2D(r4tex, (float)imX1 + 0.5f, (float)imY1 + 0.5f);
-            float deltaC = Euclidean3(gcr0, gcr1);
+            float deltaC = Euclidean(gcr0, gcr1);
             // unsigned int P1 = (unsigned int)sigmoid(5.0f,20.0f,60.0f,10.0f,deltaC);
             unsigned int P1 = _P1;
             // 15.0 + (255.0 - 15.0) * (1.0 / (1.0 + exp(10.0 * ((x - 20.) / 80.))))
