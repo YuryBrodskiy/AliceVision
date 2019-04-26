@@ -412,7 +412,7 @@ StaticVector<float>* PlaneSweepingCuda::getDepthsRcTc(int rc, int tc, int scale,
     }
 
     Point2d pixelVect = ((pToTar - pFromTar).normalize()) * std::max(1.0f, (float)scale);
-    // printf("%f %f %i %i\n",pixelVect.size(),((float)(scale*step)/3.0f),scale,step);
+    //printf("%f %f %i %i\n",pixelVect.size(),((float)(scale*step)/3.0f),scale,step);
 
     Point2d cg = Point2d(0.0f, 0.0f);
     Point3d cg3 = Point3d(0.0f, 0.0f, 0.0f);

@@ -191,6 +191,8 @@ int main(int argc, char* argv[])
       return EXIT_FAILURE;
     }
 
+	//ALICEVISION_LOG_DEBUG("Finished load of json file");
+
     // initialization
     mvsUtils::MultiViewParams mp(sfmData, imagesFolder, outputFolder, "", false, downscale);
 

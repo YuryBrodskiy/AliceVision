@@ -331,11 +331,74 @@ void estimateAndRefineDepthMaps(mvsUtils::MultiViewParams* mp, const std::vector
   }
 }
 
+void savePointCloudXYZ(mvsUtils::ImagesCache &ic, int rc, mvsUtils::MultiViewParams* mp)
+{
+    ic.refreshData(rc);
+    //std::string xyzFileName = mv_getFileNamePrefix(mp.getDepthMapsFolder(), &mp, rc) + "PCL.xyz";
+    std::string xyzFileName = mp->getDepthMapsFolder();
+    //xyzFileName.append("/");
+    xyzFileName.append(std::to_string(rc));
+    xyzFileName.append("PCL.xyz");
+
+    FILE* f = fopen(xyzFileName.c_str(), "w");
+    int w = mp->getWidth(rc);
+    int h = mp->getHeight(rc);
+    StaticVector<float> depthMap;
+
+    {
+        int width, height;
+        imageIO::readImage(getFileNameFromIndex(mp, rc, mvsUtils::EFileType::depthMap, 1), width, height,
+                           depthMap.getDataWritable());
+
+        imageIO::transposeImage(width, height, depthMap.getDataWritable());
+    }
+
+    if((depthMap.empty()) || (depthMap.size() != w * h))
+    {
+        std::stringstream s;
+        s << "filterGroupsRC: bad image dimension for camera: " << mp->getViewId(rc) << "\n";
+        s << "depthMap size: " << depthMap.size() << ", width: " << w << ", height: " << h;
+        throw std::runtime_error(s.str());
+    }
+    else
+    {
+        for(int i = 0; i < sizeOfStaticVector<float>(&depthMap); i++)
+        {
+            int x = i / h;
+            int y = i % h;
+            float depth = depthMap[i];
+            if(depth > 0.0f)
+            {
+                //@Yury Raw point cloud ???
+                Point3d p = mp->CArr[rc] + (mp->iCamArr[rc] * Point2d((float)x, (float)y)).normalize() * depth;
+                Point2d pixRC;
+                mp->getPixelFor3DPoint(&pixRC, p, rc);
+                if(!mp->isPixelInImage(pixRC, rc))
+                {
+                }
+                else
+                {
+                    Color color = ic.getPixelValueInterpolated(&pixRC, rc);
+                    fprintf(f, "%f %f %f %f %f %f\n", p.x, p.y, p.z, color.r * 255, color.g * 255, color.b * 255);
+                }
+            }
+        }
+    }
+    fclose(f);
+}
+
 void estimateAndRefineDepthMaps(int cudaDeviceNo, mvsUtils::MultiViewParams* mp, const std::vector<int>& cams)
 {
   const int fileScale = 1; // input images scale (should be one)
-  int sgmScale = mp->userParams.get<int>("semiGlobalMatching.scale", -1);
-  int sgmStep = mp->userParams.get<int>("semiGlobalMatching.step", -1);
+  /*int sgmScale = mp->userParams.get<int>("semiGlobalMatching.scale", -1);
+  int sgmStep = mp->userParams.get<int>("semiGlobalMatching.step", -1);*/
+
+  int sgmScale = mp->userParams.get<int>("semiGlobalMatching.scale", 1);			//ALEX: TEMPORARY FIX BECAUSE ON THE BIG PIPE STEP RESULTS TO 2 WHICH MAKES CORRECTED DEPTHS TO BE SO FEW THAT WHOLE PROCESS CRASHES
+  int sgmStep = mp->userParams.get<int>("semiGlobalMatching.step", 1);
+
+  ALICEVISION_LOG_INFO("Plane sweeping parameters:\n"
+                       "\t- scale: " << sgmScale << "\n"
+                          "\t- step: " << sgmStep);
 
   if(sgmScale == -1)
   {
@@ -346,6 +409,7 @@ void estimateAndRefineDepthMaps(int cudaDeviceNo, mvsUtils::MultiViewParams* mp,
       const int scaleTmp = computeStep(mp, fileScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
 
       sgmScale = std::min(2, scaleTmp);
+      //sgmScale = std::min(1, scaleTmp);
       sgmStep = computeStep(mp, fileScale * sgmScale, (width > height ? 700 : 550), (width > height ? 550 : 700));
 
       ALICEVISION_LOG_INFO("Plane sweeping parameters:\n"
@@ -364,6 +428,9 @@ void estimateAndRefineDepthMaps(int cudaDeviceNo, mvsUtils::MultiViewParams* mp,
 
   for(const int rc : cams)
   {
+      /*if(rc != 185)
+          continue;*/
+
       RefineRc sgmRefineRc(rc, sgmScale, sgmStep, &sp);
 
       sgmRefineRc.preloadSgmTcams_async();
@@ -376,6 +443,9 @@ void estimateAndRefineDepthMaps(int cudaDeviceNo, mvsUtils::MultiViewParams* mp,
 
       // write results
       sgmRefineRc.writeDepthMap();
+
+	  //Old Yury's code
+      savePointCloudXYZ(ic, rc, mp);
   }
 }
 

@@ -156,8 +156,7 @@ public:
 
     /// Save textured mesh as an OBJ + MTL file
     void saveAsOBJ(const bfs::path& dir, const std::string& basename,
-                   EImageFileType textureFileType = EImageFileType::PNG,
-                   const std::string* const geoOffsetFile = NULL );
+                   EImageFileType textureFileType = EImageFileType::PNG);
 };
 
 } // namespace mesh

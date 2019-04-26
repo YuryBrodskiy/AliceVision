@@ -85,5 +85,73 @@ bool savePLY(
   return bOk;
 }
 
+
+
+bool savePCD(const sfmData::SfMData& sfmData, const std::string& filename, ESfMData partFlag)
+{
+    const bool b_structure = (partFlag & STRUCTURE) == STRUCTURE;
+    const bool b_extrinsics = (partFlag & EXTRINSICS) == EXTRINSICS;
+
+    if(!(b_structure || b_extrinsics))
+        return false;
+
+    // Create the stream and check it is ok
+    std::ofstream stream(filename.c_str());
+    if(!stream.is_open())
+        return false;
+
+    bool bOk = false;
+    {
+        // Count how many views having valid poses:
+        IndexT view_with_pose_count = 0;
+        if(b_extrinsics)
+        {
+            for(const auto& view : sfmData.getViews())
+            {
+                view_with_pose_count += sfmData.isPoseAndIntrinsicDefined(view.second.get());
+            }
+        }
+        stream << "# .PCD v.5 - Point Cloud Data file format" << '\n'
+               << "VERSION .5" << '\n'
+               << "FIELDS x y z" << '\n'
+               << "SIZE 4 4 4" << '\n'
+               << "TYPE F F F" << '\n'
+               << "COUNT 1 1 1" << '\n'
+               << "WIDTH " << ((b_structure ? sfmData.getLandmarks().size() : 0) + view_with_pose_count) << '\n'
+               << "HEIGHT 1" << '\n'
+               << "POINTS " << ((b_structure ? sfmData.getLandmarks().size() : 0) + view_with_pose_count) << '\n'
+               << "DATA ascii" << std::endl;
+
+        if(b_extrinsics)
+        {
+            for(const auto& view : sfmData.getViews())
+            {
+                if(sfmData.isPoseAndIntrinsicDefined(view.second.get()))
+                {
+                    const geometry::Pose3 pose = sfmData.getPose(*(view.second.get())).getTransform();
+                    stream << pose.center().transpose() /*<< " 0 255 0"*/
+                           << "\n";
+                }
+            }
+        }
+
+        if(b_structure)
+        {
+            const sfmData::Landmarks& landmarks = sfmData.getLandmarks();
+            for(sfmData::Landmarks::const_iterator iterLandmarks = landmarks.begin(); iterLandmarks != landmarks.end();
+                ++iterLandmarks)
+            {
+                stream << iterLandmarks->second.X.transpose() /*<< " " << (int)iterLandmarks->second.rgb.r() << " "
+                       << (int)iterLandmarks->second.rgb.g() << " " << (int)iterLandmarks->second.rgb.b()*/ << "\n";
+            }
+        }
+        stream.flush();
+        bOk = stream.good();
+        stream.close();
+    }
+    return bOk;
+}
+
+
 } // namespace sfmDataIO
 } // namespace aliceVision

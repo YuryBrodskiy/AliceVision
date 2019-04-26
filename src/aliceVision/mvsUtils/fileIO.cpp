@@ -13,6 +13,8 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/path.hpp>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 namespace aliceVision {
 namespace mvsUtils {
 
@@ -218,8 +220,9 @@ std::string getFileNameFromViewId(const MultiViewParams* mp, int viewId, EFileTy
       {
           if(scale == 0)
               folder = mp->getDepthMapsFilterFolder();
-          else
+		  else
               folder = mp->getDepthMapsFolder();
+
           suffix = "_depthMap";
           ext = "exr";
           break;
@@ -235,8 +238,9 @@ std::string getFileNameFromViewId(const MultiViewParams* mp, int viewId, EFileTy
       {
           if(scale == 0)
               folder = mp->getDepthMapsFilterFolder();
-          else
+		  else
               folder = mp->getDepthMapsFolder();
+
           suffix = "_simMap";
           ext = "exr";
           break;

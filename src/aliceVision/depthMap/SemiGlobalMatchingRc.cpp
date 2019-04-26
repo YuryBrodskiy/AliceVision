@@ -185,17 +185,20 @@ void SemiGlobalMatchingRc::computeDepths(float minDepth, float maxDepth, StaticV
     }
 }
 
+
+
+
 StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndResetTCams(float midDepth)
 {
     StaticVector<int> tcamsNew;
     StaticVector<StaticVector<float>*>* alldepths = new StaticVector<StaticVector<float>*>();
-    alldepths->reserve(_sgmTCams.size());
+    alldepths->reserve(_sgmTCams.size());					//IT RESERVES THE MEMORY BUT IT CAN RESULT TO EMPTY VECTOR IF TCDEPTHS ARE ALWAYS BELOW 50
 
     for(int c = 0; c < _sgmTCams.size(); c++)
     {
         // depths of all meaningful points on the principal ray of the reference camera regarding the target camera tc
         StaticVector<float>* tcdepths = _sp->cps.getDepthsRcTc(_rc, _sgmTCams[c], _scale, midDepth, _sp->rcTcDepthsHalfLimit);
-        if(sizeOfStaticVector<float>(tcdepths) < 50)
+        if(sizeOfStaticVector<float>(tcdepths) < /*50*/ 30)
         {
             // fallback if we don't have enough valid samples over the epipolar line
             if(tcdepths != nullptr)
@@ -207,7 +210,7 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
             _sp->cps.getMinMaxdepths(_rc, _sgmTCams, avMinDist, avMidDist, avMaxDist);
             tcdepths = _sp->cps.getDepthsByPixelSize(_rc, avMinDist, avMidDist, avMaxDist, _scale, _sp->rcDepthsCompStep);
 
-            if(sizeOfStaticVector<float>(tcdepths) < 50)
+            if(sizeOfStaticVector<float>(tcdepths) < /*50*/ 30)
             {
                 if(tcdepths != nullptr)
                 {
@@ -228,6 +231,9 @@ StaticVector<StaticVector<float>*>* SemiGlobalMatchingRc::computeAllDepthsAndRes
 
     return alldepths;
 }
+
+
+
 
 void SemiGlobalMatchingRc::computeDepthsTcamsLimits(StaticVector<StaticVector<float>*>* alldepths)
 {
@@ -259,6 +265,12 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
     float minObsDepth, maxObsDepth, midObsDepth;
     _sp->mp->getMinMaxMidNbDepth(_rc, minObsDepth, maxObsDepth, midObsDepth, nbObsDepths, _sp->seedsRangePercentile);
 
+	/*ALICEVISION_LOG_DEBUG("MIN OBSERVED DEPTH: " << minObsDepth);
+    ALICEVISION_LOG_DEBUG("MAX OBSERVED DEPTH: " << maxObsDepth);
+    ALICEVISION_LOG_DEBUG("MID OBSERVED DEPTH: " << midObsDepth);
+    ALICEVISION_LOG_DEBUG("NUMBER OF OBSERVED DEPTHS: " << nbObsDepths);*/
+
+
     StaticVector<StaticVector<float>*>* alldepths;
 
     // all depths from the principal ray provided by target cameras
@@ -266,6 +278,8 @@ void SemiGlobalMatchingRc::computeDepthsAndResetTCams()
       alldepths = computeAllDepthsAndResetTCams(-1);
     else
       alldepths = computeAllDepthsAndResetTCams(midObsDepth);
+
+	//ALICEVISION_LOG_DEBUG("ALLDEPTHS SIZE OF CONNECTED CAMERAS: " << alldepths->size());
 
     float minDepthAll = std::numeric_limits<float>::max();
     float maxDepthAll = 0.0f;
@@ -423,6 +437,7 @@ bool SemiGlobalMatchingRc::sgmrc(bool checkIfExists)
 
     if(_sgmTCams.size() == 0)
     {
+        ALICEVISION_LOG_DEBUG("SGM_TCAMS SIZE IS O SO SGMRC WILL EXIT WHICH WILL MAKE REFINE CRASH");
       return false;
     }
 

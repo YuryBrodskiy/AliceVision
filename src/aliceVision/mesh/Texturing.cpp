@@ -413,6 +413,48 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
 
     std::vector<AccuColor> perPixelColors(textureSize);
 
+
+	    // @Yury Generate 3D color pont cloud
+    /*struct Point3DColor
+    {
+        Point3d _point;
+        AccuColor _color;
+        Point3DColor()
+            : _point(Point3d(0, 0, 0))
+            , _color()
+        {
+        }
+    };
+    std::vector<Point3DColor> coloredPointCloud(me->pts->size());
+    ALICEVISION_LOG_INFO(" make xyz points Start");
+    for(int i = 0; i < me->pts->size(); i++)
+    {
+        coloredPointCloud[i]._point = (*me->pts)[i];
+
+        const StaticVector<int>* pointVisibilities = (*pointsVisibilities)[i];
+        if(pointVisibilities != nullptr)
+        {
+            for(int camId : *pointVisibilities)
+            {
+                imageCache.refreshData(camId);
+                Point2d pixRC;
+                mp.getPixelFor3DPoint(&pixRC, coloredPointCloud[i]._point, camId);
+                if(mp.isPixelInImage(pixRC, camId))
+                {
+                    Color color = imageCache.getPixelValueInterpolated(&pixRC, camId);
+                    coloredPointCloud[i]._color += color;
+                }
+            }
+        }
+        else
+        {
+            std::cout << "Invisible point\n";
+        }
+    }
+    ALICEVISION_LOG_INFO(" make xyz points end");*/
+
+
+
     // iterate over triangles for each camera
     int camId = 0;
     for(const std::vector<unsigned int>& triangles : camTriangles)
@@ -500,6 +542,28 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
         camId++;
     }
     camTriangles.clear();
+
+	////Yury's save of pointcloud:
+
+	//long t = std::clock();
+ //   ALICEVISION_LOG_DEBUG("Save points to xyz.");
+ //   // printf("open\n");
+ //   bfs::path coloredPointCloudPath = outPath / "coloredPCD.xyz";
+ //   FILE* f = fopen(coloredPointCloudPath.string().c_str(), "w");
+
+ //   for(int i = 0; i < coloredPointCloud.size(); i++)
+ //   {
+ //       const Point3d poitPose = coloredPointCloud[i]._point;
+ //       const Color pointColor = coloredPointCloud[i]._color.average();
+ //       fprintf(f, "%f %f %f %f %f %f\n", poitPose.x, poitPose.y, poitPose.z, pointColor.r * 255, pointColor.g * 255,
+ //               pointColor.b * 255);
+ //   }
+ //   fclose(f);
+ //   // printf("done\n");
+ //   mvsUtils::printfElapsedTime(t, "Save points to xyz ");
+
+	////
+
 
     if(!texParams.fillHoles && texParams.padding > 0)
     {
