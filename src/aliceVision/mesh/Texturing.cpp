@@ -699,6 +699,9 @@ void Texturing::loadFromOBJ(const std::string& filename, bool flipNormals)
     // Fill atlases (1 atlas per material) with corresponding rectangles
     // if no material, create only one atlas with all triangles
     _atlases.resize(std::max(1, nmtls));
+
+	ALICEVISION_LOG_DEBUG("ATLASES SIZE: " << _atlases.size());
+
     for(int triangleID = 0; triangleID < trisMtlIds.size(); triangleID++)
     {
         unsigned int atlasID = nmtls ? trisMtlIds[triangleID] : 0;

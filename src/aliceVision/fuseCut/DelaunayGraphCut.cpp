@@ -1157,8 +1157,17 @@ void DelaunayGraphCut::CreateAndSavePCDFile(std::vector<Point3d>* verticesCoords
 
     for(size_t i = 0; i < verticesCoordsPrepare->size(); i++)
     {
-        file << verticesCoordsPrepare->at(i).x << " " << verticesCoordsPrepare->at(i).y << " "
-             << verticesCoordsPrepare->at(i).z << std::endl;
+		//stringstream streamX, streamY, streamZ;
+        //streamX << fixed << setprecision(6) << verticesCoordsPrepare->at(i).x;
+        //streamY << fixed << setprecision(6) << verticesCoordsPrepare->at(i).y;
+        //streamZ << fixed << setprecision(6) << verticesCoordsPrepare->at(i).z;
+
+		//string x = streamX.str();
+        //string y = streamY.str();
+        //string z = streamZ.str();
+
+        file << verticesCoordsPrepare->at(i).x << " " << verticesCoordsPrepare->at(i).y << " " << verticesCoordsPrepare->at(i).z << std::endl;
+        //file << x << " " << y << " " << z << std::endl;
     }
 
     file.close();
@@ -2974,55 +2983,6 @@ void DelaunayGraphCut::reconstructExpetiments(const StaticVector<int>& cams, con
 
 mesh::Mesh* DelaunayGraphCut::createMesh(bool filterHelperPointsTriangles)
 {
-    // ALEXANDROS: I WILL MAKE A HACK HERE WHERE I WILL CHANGE THE VERTICES TO THE CLEANED ONES I PRODUCED.
-
-    // std::ifstream
-    // inFile("C:/Users/apg/AppData/Local/Temp/NaviModelProducer/alice/20170803103957015@EFL-DVR2_Ch1/Meshing/densePointcloudCleaned.xyz");
-    //   std::string line;
-    //   std::vector<double> values;
-    //   double x, y, z;
-
-    // ALICEVISION_LOG_DEBUG("NEIGHBORING CELLS PER VERTEX SIZE: " << _neighboringCellsPerVertex.size());
-    // ALICEVISION_LOG_DEBUG("CAMS VERTEXES SIZE: " << _camsVertexes.size());
-    // ALICEVISION_LOG_DEBUG("CELLS BOOL SIZE: " << _cellIsFull.size());
-    // ALICEVISION_LOG_DEBUG("CELLS ATRIBUTES SIZE: " << _cellsAttr.size());
-    // ALICEVISION_LOG_DEBUG("VERTICES ATTRIBUTES SIZE: " << _verticesAttr.size());
-    // ALICEVISION_LOG_DEBUG("INITIAL SIZE OF VERTICES: " << _verticesCoords.size());
-    //   ALICEVISION_LOG_DEBUG("LAST ELEMENT OF OLD VERTICES: " << _verticesCoords.at(_verticesCoords.size() - 1).x << "
-    //   "
-    //                                                          << _verticesCoords.at(_verticesCoords.size() - 1).y << "
-    //                                                          "
-    //                                                          << _verticesCoords.at(_verticesCoords.size() - 1).z);
-
-    //_verticesCoords.clear();
-
-    // while (getline(inFile, line))
-    //{
-    //       if(line == "")
-    //           continue;
-
-    //	std::istringstream iss(line);
-    //       std::vector<std::string> pieces(std::istream_iterator<std::string>{iss},
-    //       std::istream_iterator<std::string>());
-
-    //	x = std::stod(pieces[0].c_str());
-    //       y = std::stod(pieces[1].c_str());
-    //       z = std::stod(pieces[2].c_str());
-
-    //	Point3d temp(x, y, z);
-    //       _verticesCoords.push_back(temp);
-
-    //}
-
-    // ALICEVISION_LOG_DEBUG("NEW SIZE OF VERTICES: " << _verticesCoords.size());
-    //   ALICEVISION_LOG_DEBUG("LAST ELEMENT OF NEW VERTICES: " << _verticesCoords.at(_verticesCoords.size() - 1).x << "
-    //   "
-    //                                                          << _verticesCoords.at(_verticesCoords.size() - 1).y << "
-    //                                                          "
-    //                                                          << _verticesCoords.at(_verticesCoords.size() - 1).z);
-
-    //
-
     ALICEVISION_LOG_INFO("Extract mesh from Graph Cut.");
 
     int nbSurfaceFacets = setIsOnSurface();
@@ -3193,51 +3153,6 @@ mesh::Mesh* DelaunayGraphCut::createMesh(bool filterHelperPointsTriangles)
     ALICEVISION_LOG_INFO("Extract mesh from Graph Cut done.");
     return me;
 }
-
-// void DelaunayGraphCut::RecreateMesh(std::string filename)
-//{
-//    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-//    /*pcl::PLYReader Reader;
-//    Reader.read(filename, *cloud);*/
-//    PCLPointCloud2 cloud_blob;
-//    io::loadPCDFile(filename, cloud_blob);
-//    fromPCLPointCloud2(cloud_blob, *cloud);
-//
-//    ALICEVISION_LOG_DEBUG("Removing outliars from file: " << filename);
-//    ALICEVISION_LOG_DEBUG("Cloud Size: " << cloud->size());
-//    ALICEVISION_LOG_DEBUG("Cloud's 101th element: " << cloud->at(100).x << " " << cloud->at(100).y << " "
-//                                                    << cloud->at(100).z);
-//    ALICEVISION_LOG_DEBUG("Cloud width: " << cloud->width);
-//    ALICEVISION_LOG_DEBUG("Cloud height: " << cloud->height);
-//
-//    StatisticalOutlierRemoval<PointXYZ> sor;
-//    sor.setInputCloud(cloud);
-//    ALICEVISION_LOG_DEBUG("Input cloud is set");
-//
-//    auto newCloud = sor.getInputCloud();
-//    ALICEVISION_LOG_DEBUG("Cloud Size: " << newCloud->size());
-//    ALICEVISION_LOG_DEBUG("Cloud's last element: " << newCloud->at(cloud->points.size() - 1).x << " "
-//                                                   << newCloud->at(cloud->points.size() - 1).y << " "
-//                                                   << newCloud->at(cloud->points.size() - 1).z);
-//    ALICEVISION_LOG_DEBUG("Cloud width: " << newCloud->width);
-//    ALICEVISION_LOG_DEBUG("Cloud height: " << newCloud->height);
-//
-//    // PointCloud<PointXYZ>::Ptr outLiarsCleaned(new PointCloud<PointXYZ>);
-//
-//    sor.setMeanK(3); // Play with fixed for now?
-//    ALICEVISION_LOG_DEBUG("Mean K is set");
-//
-//    sor.setStddevMulThresh(1.0);
-//    ALICEVISION_LOG_DEBUG("Standard deviation multiplier threshold is set");
-//
-//    sor.filter(*cloud);
-//    ALICEVISION_LOG_DEBUG("Finished filtering");
-//
-//    // Save pointcloud so to check if it is ok
-//    io::savePCDFile("C:/Users/apg/AppData/Local/Temp/NaviModelProducer/alice/20170803103957015@EFL-DVR2_Ch1/Meshing/"
-//                    "cleanedDense.xyz",
-//                    *cloud);
-//}
 
 void DelaunayGraphCut::segmentFullOrFree(bool full, StaticVector<int>** out_fullSegsColor, int& out_nsegments)
 {
