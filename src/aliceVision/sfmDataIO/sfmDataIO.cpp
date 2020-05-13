@@ -151,6 +151,10 @@ bool Save(const sfmData::SfMData& sfmData, const std::string& filename, ESfMData
   {
       status = savePCD(sfmData, tmpPath, partFlag);
   }
+  else if(extension == ".xyz")
+  {
+      status = saveXYZ(sfmData, tmpPath, partFlag);
+  }
 #if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_ALEMBIC)
   else if (extension == ".abc") // Alembic
   {

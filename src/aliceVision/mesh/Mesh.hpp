@@ -13,6 +13,7 @@
 #include <aliceVision/mvsData/StaticVector.hpp>
 #include <aliceVision/mvsData/Voxel.hpp>
 #include <aliceVision/mvsUtils/common.hpp>
+#include <Eigen/Eigen>
 
 namespace aliceVision {
 namespace mesh {
@@ -105,17 +106,18 @@ public:
 public:
     StaticVector<Point3d>* pts = nullptr;
     StaticVector<Mesh::triangle>* tris = nullptr;
-    Matrix3x4 transformGlobal;
+    
 
 	//ALEXANDROS:
-    double transformationMatrix[16];
+    Eigen::Matrix4d H_0_n0;
+    //Point3d ApplyTransformation(Point3d pt);
+    void InitializeTransformationMatrix(const Eigen::Matrix4d& _H_0_n0);
 	//
 
     Mesh();
     ~Mesh();
 
-	Point3d ApplyTransformation(Point3d pt);
-	void InitializeTransformationMatrix(const std::string& filename);
+	
 
     void saveToObj(const std::string& filename);
 

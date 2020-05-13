@@ -25,6 +25,7 @@
 
 #include <map>
 #include <set>
+#include <iosfwd>
 
 namespace aliceVision {
 namespace mesh {
@@ -415,7 +416,7 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
 
 
 	    // @Yury Generate 3D color pont cloud
-    /*struct Point3DColor
+    struct Point3DColor
     {
         Point3d _point;
         AccuColor _color;
@@ -427,31 +428,34 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
     };
     std::vector<Point3DColor> coloredPointCloud(me->pts->size());
     ALICEVISION_LOG_INFO(" make xyz points Start");
-    for(int i = 0; i < me->pts->size(); i++)
+    for(int camId =0;camId<mp.ncams;camId++)
     {
-        coloredPointCloud[i]._point = (*me->pts)[i];
-
-        const StaticVector<int>* pointVisibilities = (*pointsVisibilities)[i];
-        if(pointVisibilities != nullptr)
+        imageCache.refreshData(camId);
+        for(int i = 0; i < me->pts->size(); i++)
         {
-            for(int camId : *pointVisibilities)
+            coloredPointCloud[i]._point = (*me->pts)[i];
+            const StaticVector<int>* pointVisibilities = (*pointsVisibilities)[i];
+            if(pointVisibilities != nullptr)
             {
-                imageCache.refreshData(camId);
-                Point2d pixRC;
-                mp.getPixelFor3DPoint(&pixRC, coloredPointCloud[i]._point, camId);
-                if(mp.isPixelInImage(pixRC, camId))
+               if(std::find(std::begin(*pointVisibilities), std::end(*pointVisibilities), camId) !=
+                   std::end(*pointVisibilities))
                 {
-                    Color color = imageCache.getPixelValueInterpolated(&pixRC, camId);
-                    coloredPointCloud[i]._color += color;
+                    Point2d pixRC;
+                    mp.getPixelFor3DPoint(&pixRC, coloredPointCloud[i]._point, camId);
+                    if(mp.isPixelInImage(pixRC, camId))
+                    {
+                        Color color = imageCache.getPixelValueInterpolated(&pixRC, camId);
+                        coloredPointCloud[i]._color += color;
+                    }
                 }
             }
-        }
-        else
-        {
-            std::cout << "Invisible point\n";
+            else
+            {
+                std::cout << "Invisible point\n";
+            }
         }
     }
-    ALICEVISION_LOG_INFO(" make xyz points end");*/
+    ALICEVISION_LOG_INFO(" make xyz points end");
 
 
 
@@ -545,24 +549,24 @@ void Texturing::generateTexture(const mvsUtils::MultiViewParams& mp,
 
 	////Yury's save of pointcloud:
 
-	//long t = std::clock();
- //   ALICEVISION_LOG_DEBUG("Save points to xyz.");
- //   // printf("open\n");
- //   bfs::path coloredPointCloudPath = outPath / "coloredPCD.xyz";
- //   FILE* f = fopen(coloredPointCloudPath.string().c_str(), "w");
+	long t = std::clock();
+    ALICEVISION_LOG_DEBUG("Save points to xyz.");
+    // printf("open\n");
+    bfs::path coloredPointCloudPath = outPath / "coloredPCD.xyz";
+    FILE* f = fopen(coloredPointCloudPath.string().c_str(), "w");
 
- //   for(int i = 0; i < coloredPointCloud.size(); i++)
- //   {
- //       const Point3d poitPose = coloredPointCloud[i]._point;
- //       const Color pointColor = coloredPointCloud[i]._color.average();
- //       fprintf(f, "%f %f %f %f %f %f\n", poitPose.x, poitPose.y, poitPose.z, pointColor.r * 255, pointColor.g * 255,
- //               pointColor.b * 255);
- //   }
- //   fclose(f);
- //   // printf("done\n");
- //   mvsUtils::printfElapsedTime(t, "Save points to xyz ");
+    for(int i = 0; i < coloredPointCloud.size(); i++)
+    {
+        const Point3d poitPose = coloredPointCloud[i]._point;
+        const Color pointColor = coloredPointCloud[i]._color.average();
+        fprintf(f, "%f %f %f %f %f %f\n", poitPose.x, poitPose.y, poitPose.z, pointColor.r * 255, pointColor.g * 255,
+                pointColor.b * 255);
+    }
+    fclose(f);
+    // printf("done\n");
+    mvsUtils::printfElapsedTime(t, "Save points to xyz ");
 
-	////
+	//
 
 
     if(!texParams.fillHoles && texParams.padding > 0)
@@ -718,7 +722,10 @@ void Texturing::remapVisibilities(EVisibilityRemappingMethod remappingMethod, co
   if(remappingMethod == EVisibilityRemappingMethod::PullPush || remappingMethod == mesh::EVisibilityRemappingMethod::Pull)
     remapMeshVisibilities_pullVerticesVisibility(refMesh, refPointsVisibilities, *me, *pointsVisibilities);
   if(remappingMethod == EVisibilityRemappingMethod::PullPush || remappingMethod == mesh::EVisibilityRemappingMethod::Push)
+  {
     remapMeshVisibilities_pushVerticesVisibilityToTriangles(refMesh, refPointsVisibilities, *me, *pointsVisibilities);
+    remapMeshVisibilities_pushVerticesVisibilityToTriangles(refMesh, refPointsVisibilities, *me, *pointsVisibilities);
+  }
   if(pointsVisibilities->empty())
     throw std::runtime_error("No visibility after visibility remapping.");
 }
@@ -790,26 +797,37 @@ void Texturing::unwrap(mvsUtils::MultiViewParams& mp, EUnwrapMethod method)
 void Texturing::saveAsOBJ(const bfs::path& dir, const std::string& basename, EImageFileType textureFileType)
 {
     ALICEVISION_LOG_INFO("Writing obj and mtl file.");
-
+    using namespace std;
     std::string objFilename = (dir / (basename + ".obj")).string();
     std::string mtlName = (basename + ".mtl");
     std::string mtlFilename = (dir / mtlName).string();
 
+    
+    Eigen::IOFormat eiva_bumper_format(10, Eigen::DontAlignCols, " ", "\n", "#EIVAt ");
+
+    stringstream eiva_transform_bumper;
+    eiva_transform_bumper << "# \n"
+                          << "# Wavefront OBJ file\n"
+                          << "# Created with AliceVision\n"
+                          << "# \n";
+    eiva_transform_bumper << H_0_n0.format(eiva_bumper_format) << endl;
+    eiva_transform_bumper << "# \n";
     // create .OBJ file
     FILE* fobj = fopen(objFilename.c_str(), "w");
 
     // header
-    fprintf(fobj, "# \n");
-    fprintf(fobj, "# Wavefront OBJ file\n");
-    fprintf(fobj, "# Created with AliceVision\n");
-    fprintf(fobj, "# \n");
+
+
+    fprintf(fobj, eiva_transform_bumper.str().c_str());
     fprintf(fobj, "mtllib %s\n\n", mtlName.c_str());
     fprintf(fobj, "g TexturedMesh\n");
 
     // write vertices
     auto vertices = me->pts;
     for(int i = 0; i < vertices->size(); ++i)
+    {
         fprintf(fobj, "v %f %f %f\n", (*vertices)[i].x, (*vertices)[i].y, (*vertices)[i].z);
+    }
 
     // write UV coordinates
     for(int i=0; i < uvCoords.size(); ++i)
@@ -830,8 +848,8 @@ void Texturing::saveAsOBJ(const bfs::path& dir, const std::string& basename, EIm
             int uvID1 = trisUvIds[triangleID].m[0];
             int uvID2 = trisUvIds[triangleID].m[1];
             int uvID3 = trisUvIds[triangleID].m[2];
-
-            fprintf(fobj, "f %i/%i %i/%i %i/%i\n", vertexID1 + 1, uvID1 + 1, vertexID2 + 1, uvID2 + 1, vertexID3 + 1, uvID3 + 1); // indexed from 1
+            if((*pointsVisibilities)[vertexID1]!=nullptr && !(*pointsVisibilities)[vertexID1]->empty())
+                fprintf(fobj, "f %i/%i %i/%i %i/%i\n", vertexID1 + 1, uvID1 + 1, vertexID2 + 1, uvID2 + 1, vertexID3 + 1, uvID3 + 1); // indexed from 1
         }
     }
     fclose(fobj);

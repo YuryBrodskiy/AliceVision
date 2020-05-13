@@ -99,6 +99,7 @@ struct Texturing
             deleteArrayOfArrays<int>(&pointsVisibilities);
         delete me;
     }
+    Eigen::Matrix4d H_0_n0;
 
 public:
 
@@ -108,6 +109,7 @@ public:
     /// Load a mesh from a .obj file and initialize internal structures
     void loadFromOBJ(const std::string& filename, bool flipNormals=false);
 
+    void InitializeTransformationMatrix(const Eigen::Matrix4d& _H_0_n0) { H_0_n0 = _H_0_n0; }
     /**
      * @brief Remap visibilities
      *

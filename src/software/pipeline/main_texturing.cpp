@@ -18,6 +18,7 @@
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include "aliceVision/sfmDataIO/jsonIO.hpp"
 
 // These constants define the current software version.
 // They must be updated when the command line is changed.
@@ -171,7 +172,7 @@ int main(int argc, char* argv[])
       refPoints.pts = new StaticVector<Point3d>();
       refPoints.pts->reserve(nbPoints);
       refVisibilities->reserve(nbPoints);
-
+      
       for(const auto& landmarkPair : sfmData.getLandmarks())
       {
         const sfmData::Landmark& landmark = landmarkPair.second;
@@ -184,7 +185,7 @@ int main(int argc, char* argv[])
         refVisibilities->push_back(pointVisibility);
         refPoints.pts->push_back(Point3d(landmark.X(0), landmark.X(1), landmark.X(2)));
       }
-
+      
       mesh.remapVisibilities(texParams.visibilityRemappingMethod, refPoints, *refVisibilities);
 
       // delete visibilities
@@ -200,6 +201,23 @@ int main(int argc, char* argv[])
       ALICEVISION_LOG_INFO("Unwrapping done.");
     }
 
+    Eigen::Matrix4d H_0_n0;
+    const std::string extension = fs::extension(sfmDataFilename);
+    bool status = false;
+
+    if(extension == ".json")
+    {
+        H_0_n0 = sfmDataIO::getTransformToGlobalJson(sfmDataFilename);
+    }
+    else
+    {
+        fs::path inputDirectory = fs::path(sfmDataFilename).parent_path();
+        std::string transformationFile = inputDirectory.string();
+        transformationFile.append("/to_global_transformation.txt");
+        H_0_n0 = sfmDataIO::getTransformToGlobalText(transformationFile);
+    }
+    mesh.InitializeTransformationMatrix(H_0_n0);
+    //
     // save final obj file
     mesh.saveAsOBJ(outputFolder, "texturedMesh", outputTextureFileType);
 

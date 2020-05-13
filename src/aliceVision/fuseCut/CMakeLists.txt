@@ -22,7 +22,8 @@ set(fuseCut_files_sources
   ReconstructionPlan.cpp
   VoxelsGrid.cpp
 )
-
+find_package(CleanPoints REQUIRED)
+#find_package(Boost COMPONENTS program_options system filesystem REQUIRED)
 alicevision_add_library(aliceVision_fuseCut
   SOURCES ${fuseCut_files_headers} ${fuseCut_files_sources}
   PUBLIC_LINKS
@@ -37,4 +38,6 @@ alicevision_add_library(aliceVision_fuseCut
     ${Boost_CONTAINER_LIBRARY}
   PRIVATE_LINKS
     nanoflann
+	CleanPoints
+	Boost::boost
 )

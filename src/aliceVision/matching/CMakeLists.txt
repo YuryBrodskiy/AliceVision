@@ -33,6 +33,8 @@ alicevision_add_library(aliceVision_matching
   PRIVATE_LINKS
     ${Boost_FILESYSTEM_LIBRARY}
     ${FLANN_LIBRARY}
+	flann
+	flann_cpp
 )
 
 # Unit tests

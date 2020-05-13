@@ -24,20 +24,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
 
-//#include <pcl/filters/statistical_outlier_removal.h>
-//#include <pcl/io/ply_io.h>
-//#include <pcl/io/pcd_io.h>
 #include <iostream>
 #include <fstream>
 #include <limits>
 
-//#include <pcl/features/normal_3d_omp.h>
-//#include <pcl/point_types.h>
-//#include <pcl/surface/mls.h>
-//#include <pcl/filters/passthrough.h>
-//#include <pcl/filters/radius_outlier_removal.h>
-//#include <pcl/filters/conditional_removal.h>
-//#include <pcl/common/transforms.h>
+#include "CleanPoints.hpp"
+#include "../mvsUtils/ImagesCache.hpp"
 
 // using namespace pcl;
 using namespace std;
@@ -843,6 +835,65 @@ void DelaunayGraphCut::addHelperPoints(int nGridHelperVolumePointsDim, const Poi
     ALICEVISION_LOG_DEBUG(" done\n");
 }
 
+struct AccuColor
+{
+    Color colorSum;
+    unsigned int count = 0;
+
+    unsigned int add(const Color& color)
+    {
+        colorSum = colorSum + color;
+        return ++count;
+    }
+
+    Color average() const { return count > 0 ? colorSum / (float)count : colorSum; }
+
+    void operator+(const Color& other) { add(other); }
+
+    AccuColor& operator+=(const Color& other)
+    {
+        add(other);
+        return *this;
+    }
+};
+struct Point3DColor
+{
+    Point3d _point;
+    AccuColor _color;
+    Point3DColor()
+        : _point(Point3d(0, 0, 0))
+        , _color()
+    {
+    }
+};
+
+void printOutPCL(const std::vector<Point3d>& verticesCoordsPrepare, const std::vector<double>& pixSizePrepare,
+                 std::string xyzFileName)
+{
+    std::vector<Point3DColor> coloredPointCloud;
+    for(int i = 0; i < verticesCoordsPrepare.size(); i++)
+    {
+        if(pixSizePrepare[i] > 0)
+        {
+            Point3DColor p;
+            p._point = verticesCoordsPrepare[i];
+            coloredPointCloud.push_back(p);
+        }
+    }
+
+    FILE* f = fopen(xyzFileName.c_str(), "w");
+    for(int i = 0; i < coloredPointCloud.size(); i++)
+    {
+        const Point3d poitPose = coloredPointCloud[i]._point;
+        const Color pointColor = coloredPointCloud[i]._color.average();
+        fprintf(f, "%f %f %f %f %f %f\n", poitPose.x, poitPose.y, poitPose.z, pointColor.r * 255, pointColor.g * 255,
+                pointColor.b * 255);
+    }
+    fclose(f);
+}
+
+
+
 void DelaunayGraphCut::fuseFromDepthMaps(const StaticVector<int>& cams, const Point3d voxel[8],
                                          const FuseParams& params)
 {
@@ -1087,7 +1138,7 @@ void DelaunayGraphCut::fuseFromDepthMaps(const StaticVector<int>& cams, const Po
     ALICEVISION_LOG_INFO("Angle score min: " << stat_minAngleScore << ", max: " << stat_maxAngleScore << ".");
 #endif
     removeInvalidPoints(verticesCoordsPrepare, pixSizePrepare, simScorePrepare, verticesAttrPrepare);
-
+    
     ALICEVISION_LOG_INFO("Filter by angle score and sim score");
 
     // while more points than the max points (with a limit to 20 iterations).
@@ -1135,9 +1186,10 @@ void DelaunayGraphCut::fuseFromDepthMaps(const StaticVector<int>& cams, const Po
     ALICEVISION_LOG_INFO("fuseFromDepthMaps done: " << _verticesCoords.size() << " points created.");
 }
 
-void DelaunayGraphCut::CreateAndSavePCDFile(std::vector<Point3d>* verticesCoordsPrepare, std::string outDirectory, std::string text)
+void DelaunayGraphCut::CreateAndSavePCDFile(std::vector<Point3d>* verticesCoordsPrepare, std::string outDirectory,
+                                            std::string text)
 {
-    //std::string filepath = mp->getDepthMapsFilterFolder();
+    // std::string filepath = mp->getDepthMapsFilterFolder();
     std::string filepath = outDirectory;
     filepath.append("\\");
     filepath.append(text);
@@ -1157,17 +1209,8 @@ void DelaunayGraphCut::CreateAndSavePCDFile(std::vector<Point3d>* verticesCoords
 
     for(size_t i = 0; i < verticesCoordsPrepare->size(); i++)
     {
-		//stringstream streamX, streamY, streamZ;
-        //streamX << fixed << setprecision(6) << verticesCoordsPrepare->at(i).x;
-        //streamY << fixed << setprecision(6) << verticesCoordsPrepare->at(i).y;
-        //streamZ << fixed << setprecision(6) << verticesCoordsPrepare->at(i).z;
-
-		//string x = streamX.str();
-        //string y = streamY.str();
-        //string z = streamZ.str();
-
-        file << verticesCoordsPrepare->at(i).x << " " << verticesCoordsPrepare->at(i).y << " " << verticesCoordsPrepare->at(i).z << std::endl;
-        //file << x << " " << y << " " << z << std::endl;
+        file << verticesCoordsPrepare->at(i).x << " " << verticesCoordsPrepare->at(i).y << " "
+             << verticesCoordsPrepare->at(i).z << std::endl;
     }
 
     file.close();
@@ -2565,16 +2608,16 @@ void DelaunayGraphCut::createDensePointCloud(std::string outDirectory, Point3d h
 
 
     // ALEXANDROS:
-    ALICEVISION_LOG_DEBUG("START PCL's STATISTICAL OUTLIER REMOVAL");
-    ALICEVISION_LOG_DEBUG("VERTICES SIZE BEFORE (PCL) FILTERING: " << _verticesCoords.size());
-    ALICEVISION_LOG_DEBUG("VERTICES ATTRIBUTES SIZE BEFORE (PCL) FILTERING: " << _verticesAttr.size());
-
-    // FROM HERE AND ON I HAVE THE VERTICES OF THE CLOUD AND BY PERFORMING A (PCL) STATISTICAL OUTLIER REMOVAL (MEAN K=20 fixed for now), THE CLOUD CAN BECOME PRETTY CLEANED
-    RemoveOutlier(outDirectory);
-
-    ALICEVISION_LOG_DEBUG("FINISHED PCL's STATISTICAL OUTLIER REMOVAL");
-	//
-
+    ALICEVISION_LOG_DEBUG("START PCL's STATISTICAL OUTLIER REMOVAL. VERTICES SIZE: " << _verticesCoords.size() << " ATTRIBUTES SIZE BEFORE (PCL) FILTERING: " << _verticesAttr.size());
+    // FROM HERE AND ON I HAVE THE VERTICES OF THE CLOUD AND BY PERFORMING A (PCL) STATISTICAL OUTLIER REMOVAL (MEAN
+    // K=20 fixed for now), THE CLOUD CAN BECOME PRETTY CLEANED
+    // RemoveOutlier(outDirectory);
+    removeOutlier();
+    ALICEVISION_LOG_DEBUG("FINISHED PCL's STATISTICAL OUTLIER REMOVAL. VERTICES SIZE: "
+                          << _verticesCoords.size()
+                          << " ATTRIBUTES SIZE BEFORE (PCL) FILTERING: " << _verticesAttr.size());
+    //
+    
 
     // add volume points to prevent singularities
     addHelperPoints(nGridHelperVolumePointsDim, hexah, minDist);
@@ -2583,7 +2626,7 @@ void DelaunayGraphCut::createDensePointCloud(std::string outDirectory, Point3d h
 
 // ALEXANDROS:
 
-vector<Point3d> StoreNewCloudFromFile(double minX, double minY, double minZ, string filename) 
+vector<Point3d> StoreNewCloudFromFile(double minX, double minY, double minZ, string filename)
 {
     ifstream inFile(filename);
     string line;
@@ -2609,49 +2652,70 @@ vector<Point3d> StoreNewCloudFromFile(double minX, double minY, double minZ, str
             y += minY;
             z += minZ;
 
-			Point3d temp(x, y, z);
+            Point3d temp(x, y, z);
 
-            values.push_back(temp);			
+            values.push_back(temp);
         }
     }
 
-	return values;
+    return values;
 }
 
 vector<GC_vertexInfo> StoreRemovedIndexes(vector<GC_vertexInfo> attributes, string filename)
 {
 
-	ifstream inFile(filename);
+    ifstream inFile(filename);
     string line;
 
-	vector<GC_vertexInfo> newVector;
+    vector<GC_vertexInfo> newVector;
 
-	int count = 0;
+    int count = 0;
 
-	while (getline(inFile, line))
-	{
+    while (getline(inFile, line))
+    {
         if(line == "")
             continue;
 
-		int value = stoi(line);
+        int value = stoi(line);
 
-		while (value != count)
-		{
+        while (value != count)
+        {
             newVector.push_back(attributes.at(count));
             count++;
-		}
-		count++;
-	}
+        }
+        count++;
+    }
 
-	//You need to push also the last elements after the last removed index
-	for (int i = count; i < attributes.size(); i++)
-	{
+    //You need to push also the last elements after the last removed index
+    for (int i = count; i < attributes.size(); i++)
+    {
         newVector.push_back(attributes.at(count));
-	}
+    }
 
-	return newVector;
+    return newVector;
 }
 
+void DelaunayGraphCut::removeOutlier()
+{
+    auto cleaner = getCleanPoints();
+    for(int i = 0; i < _verticesCoords.size(); i++)
+    {
+        cleaner->add(_verticesCoords[i].x, _verticesCoords[i].y, _verticesCoords[i].z);
+    }
+    auto removedIndices = cleaner->getRemovedIndices();
+    std::vector<Point3d> verticesCoords;
+    std::vector<GC_vertexInfo> verticesAttr;
+    for(int i = 0; i < _verticesCoords.size(); i++)
+    {
+        if(std::find(removedIndices.begin(), removedIndices.end(), i) == removedIndices.end())
+        {
+            verticesCoords.push_back(_verticesCoords[i]);
+            verticesAttr.push_back(_verticesAttr[i]);
+        }
+    }
+    _verticesAttr = verticesAttr;
+    _verticesCoords = verticesCoords;
+}
 void DelaunayGraphCut::RemoveOutlier(std::string outDirectory)
 {
     double minX, minY, minZ;
@@ -2685,41 +2749,47 @@ void DelaunayGraphCut::RemoveOutlier(std::string outDirectory)
     // Save to PCD file so you can call the external
     CreateAndSavePCDFile(&_verticesCoords, outDirectory, "tempPCDFile");
 
-	//Call the external process
+    //Call the external process
     STARTUPINFO info = {sizeof(info)};
     PROCESS_INFORMATION processInfo;
-    string arguments = "C:/Users/apg/Documents/AliceVisionMeshingFilteringPCL/build/Release/meshFiltering.exe";		//This has to be changed to the instalation path where the external process is going to be
+    string arguments = "C:/Users/apg/Documents/AliceVisionMeshingFilteringPCL/build/Release/meshFiltering.exe"; // This has to be
+                                                                                                 // changed to the
+                                                                                                 // instalation path
+                                                                                                 // where the external
+                                                                                                 // process is going to
+                                                                                                 // be
     arguments.append(" ");
     arguments.append(outDirectory);
     LPSTR cmd = const_cast<char*>(arguments.c_str());
     if(CreateProcess(NULL, cmd, NULL, NULL, true, 0, NULL, NULL, &info, &processInfo))
-	{
+    {
         WaitForSingleObject(processInfo.hProcess, INFINITE);
         CloseHandle(processInfo.hProcess);
         CloseHandle(processInfo.hThread);
 
-		string filename = outDirectory;			//check if external process created the file we needed or do not do anything else
+        string filename =
+            outDirectory; // check if external process created the file we needed or do not do anything else
         filename.append("/cleaned.xyz");
         ifstream iFile(filename);
-		if(iFile)
-		{
+        if(iFile)
+        {
             iFile.close();
 
-			// Change the _verticesCoords with the new ones
-			_verticesCoords.clear();
-			_verticesCoords = StoreNewCloudFromFile(minX, minY, minZ, filename);
+            // Change the _verticesCoords with the new ones
+            _verticesCoords.clear();
+            _verticesCoords = StoreNewCloudFromFile(minX, minY, minZ, filename);
 
-			// Do the same and remove the indexes from _verticesAttr
+            // Do the same and remove the indexes from _verticesAttr
             string removedIndicesFile = outDirectory;
             removedIndicesFile.append("/removedIndices.txt");
-			_verticesAttr = StoreRemovedIndexes(_verticesAttr, removedIndicesFile);
+            _verticesAttr = StoreRemovedIndexes(_verticesAttr, removedIndicesFile);
 
-			ALICEVISION_LOG_DEBUG("VERTICES SIZE AFTER PCL: " << _verticesCoords.size());
-			ALICEVISION_LOG_DEBUG("VERTICES ATTRIBUTES SIZE AFTER PCL: " << _verticesAttr.size());
-		}
-		else		
-            ALICEVISION_LOG_DEBUG("PCL STATISTICAL OUTLIER REMOVAL FAILED");		
-	}
+            ALICEVISION_LOG_DEBUG("VERTICES SIZE AFTER PCL: " << _verticesCoords.size());
+            ALICEVISION_LOG_DEBUG("VERTICES ATTRIBUTES SIZE AFTER PCL: " << _verticesAttr.size());
+        }
+        else
+            ALICEVISION_LOG_DEBUG("PCL STATISTICAL OUTLIER REMOVAL FAILED");
+    }
 }
 
 void DelaunayGraphCut::createGraphCut(Point3d hexah[8], const StaticVector<int>& cams, VoxelsGrid* ls,

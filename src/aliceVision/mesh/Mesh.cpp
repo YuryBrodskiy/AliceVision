@@ -33,61 +33,31 @@ Mesh::~Mesh()
 }
 
 // ALEXANDROS:
-void Mesh::InitializeTransformationMatrix(const std::string& filename)
+void Mesh::InitializeTransformationMatrix(const Eigen::Matrix4d& _H_0_n0)
 {
-    ifstream inFile(filename);
-    string line;
-    double x, y, z, w;
-    short order = 0;
-
-    while(getline(inFile, line))
-    {
-        if(line == "")
-            continue;
-
-        istringstream iss(line);
-        vector<string> pieces(istream_iterator<string>{iss}, istream_iterator<string>());
-
-        if(pieces.size() == 4) // It has only x,y,z information saved
-        {
-
-            x = stod(pieces[0].c_str());
-            y = stod(pieces[1].c_str());
-            z = stod(pieces[2].c_str());
-            w = stod(pieces[3].c_str());
-
-            transformationMatrix[order] = x;
-            order++;
-            transformationMatrix[order] = y;
-            order++;
-            transformationMatrix[order] = z;
-            order++;
-            transformationMatrix[order] = w;
-            order++;
-        }
-    }
+    H_0_n0 = _H_0_n0;
 }
+//Point3d Mesh::ApplyTransformation(Point3d pt)
+//{
+//    double x, y, z, w;
+//    x = pt.x;
+//    y = pt.y;
+//    z = pt.z;
+//	w = 1;
 //
+//	double xn, yn, zn, wn;
+//
+//	xn = transformationMatrix[0] * x + transformationMatrix[1] * y + transformationMatrix[2] * z + transformationMatrix[3] * w;
+//	yn = transformationMatrix[4] * x + transformationMatrix[5] * y + transformationMatrix[6] * z + transformationMatrix[7] * w;
+//    zn = transformationMatrix[8] * x + transformationMatrix[9] * y + transformationMatrix[10] * z + transformationMatrix[11] * w;
+//    wn = transformationMatrix[12] * x + transformationMatrix[13] * y + transformationMatrix[14] * z + transformationMatrix[15] * w;
+//
+//	Point3d resultPt(xn, yn, zn);
+//
+//    return resultPt;
+//}
 
-Point3d Mesh::ApplyTransformation(Point3d pt)
-{
-    double x, y, z, w;
-    x = pt.x;
-    y = pt.y;
-    z = pt.z;
-	w = 1;
 
-	double xn, yn, zn, wn;
-
-	xn = transformationMatrix[0] * x + transformationMatrix[1] * y + transformationMatrix[2] * z + transformationMatrix[3] * w;
-	yn = transformationMatrix[4] * x + transformationMatrix[5] * y + transformationMatrix[6] * z + transformationMatrix[7] * w;
-    zn = transformationMatrix[8] * x + transformationMatrix[9] * y + transformationMatrix[10] * z + transformationMatrix[11] * w;
-    wn = transformationMatrix[12] * x + transformationMatrix[13] * y + transformationMatrix[14] * z + transformationMatrix[15] * w;
-
-	Point3d resultPt(xn, yn, zn);
-
-    return resultPt;
-}
 
 
 string CreateTextLineForTransformationMatrix(double x, double y, double z, double w)
@@ -111,26 +81,21 @@ void Mesh::saveToObj(const std::string& filename)
     ALICEVISION_LOG_INFO("Nb points: " << pts->size());
     ALICEVISION_LOG_INFO("Nb triangles: " << tris->size());
 
-    FILE* f = fopen(filename.c_str(), "w");
+    Eigen::IOFormat eiva_bumper_format(10, Eigen::DontAlignCols, " ", "\n", "#EIVAt ");
 
-    fprintf(f, "# \n");
-    fprintf(f, "# Wavefront OBJ file\n");
-    fprintf(f, "# Created with AliceVision\n");
-    fprintf(f, "# \n");
+    stringstream eiva_transform_bumper;
+    eiva_transform_bumper << "# \n"
+                          << "# Wavefront OBJ file\n"
+                          << "# Created with AliceVision\n"
+                          << "# \n";
+    eiva_transform_bumper << H_0_n0.format(eiva_bumper_format)<<endl;
+    eiva_transform_bumper << "# \n";
+    ALICEVISION_LOG_INFO("H_0_n0 \n\n\n" << H_0_n0.format(eiva_bumper_format));
 
-	// Write the transformation matrix info into file so NaviModel can pick it up
-    string textLine = CreateTextLineForTransformationMatrix(transformationMatrix[0], transformationMatrix[1], transformationMatrix[2], transformationMatrix[3]);
-    fprintf(f, textLine.c_str());
-    textLine = CreateTextLineForTransformationMatrix(transformationMatrix[4], transformationMatrix[5], transformationMatrix[6], transformationMatrix[7]);
-    fprintf(f, textLine.c_str());
-    textLine = CreateTextLineForTransformationMatrix(transformationMatrix[8], transformationMatrix[9], transformationMatrix[10], transformationMatrix[11]);		//Because of NaviModel's coordinate system
-    fprintf(f, textLine.c_str());
-    textLine = CreateTextLineForTransformationMatrix(transformationMatrix[12], transformationMatrix[13], transformationMatrix[14], transformationMatrix[15]);
-    fprintf(f, textLine.c_str());
 	//
-
-	fprintf(f, "# \n");
-    fprintf(f, "g Mesh\n");
+    FILE* f = fopen(filename.c_str(), "w");
+    fprintf(f, eiva_transform_bumper.str().c_str());
+	fprintf(f, "g Mesh\n");
 
     for(int i = 0; i < pts->size(); i++)
     {

@@ -222,5 +222,9 @@ bool saveJSON(const sfmData::SfMData& sfmData, const std::string& filename, ESfM
  */
 bool loadJSON(sfmData::SfMData& sfmData, const std::string& filename, ESfMData partFlag, bool incompleteViews = false);
 
+bool saveXYZ(const sfmData::SfMData& sfmData, const std::string& filename, ESfMData partFlag);
+Eigen::Matrix4d getTransformToGlobalJson(const std::string& filename);
+Eigen::Matrix4d getTransformToGlobalText(const std::string& filename);
+
 } // namespace sfmDataIO
 } // namespace aliceVision

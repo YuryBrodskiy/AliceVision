@@ -329,6 +329,7 @@ public:
 
 
 
+    void removeOutlier();
 	//ALEXANDROS:
     void RemoveOutlier(std::string outirectory);
 

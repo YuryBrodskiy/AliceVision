@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <cassert>
+#include <iosfwd>
 
 namespace aliceVision
 {
@@ -601,6 +602,61 @@ bool loadJSON(sfmData::SfMData& sfmData, const std::string& filename, ESfMData p
     }
 
     return true;
+}
+
+bool saveXYZ(const sfmData::SfMData& sfmData, const std::string& filename, ESfMData partFlag)
+{
+    std::ofstream f(filename);
+    
+    if(!sfmData.getLandmarks().empty())
+    {
+        for (const auto& structurePair : sfmData.getLandmarks())
+        {
+            auto landmark = structurePair.second;
+            //std::cout << landmark.X.transpose() << " " << landmark.rgb.transpose().cast<int>() << std::endl;
+            f << landmark.X.transpose() << " " << landmark.rgb.transpose().cast<int>() << std::endl;
+                
+        }
+    }
+    f.close();
+    return true;
+}
+
+Eigen::Matrix4d getTransformToGlobalJson(const std::string& filename)
+{
+    Eigen::Matrix4d H_0_n0 = Eigen::Matrix4d::Identity();
+    bpt::ptree fileTree;
+    bpt::read_json(filename, fileTree);
+    loadMatrix("H_0_n0", H_0_n0, fileTree);
+    return H_0_n0.transpose(); // alice reads matrix column wise
+}
+
+Eigen::Matrix4d getTransformToGlobalText(const std::string& filename) 
+{
+    using namespace std;
+    Eigen::Matrix4d H_0_n0 = Eigen::Matrix4d::Identity();
+    ifstream inFile(filename);
+    string line;
+    short order = 0;
+
+    while(getline(inFile, line))
+    {
+        if(line.empty())
+            continue;
+
+        istringstream iss(line);
+        vector<string> pieces(istream_iterator<string>{iss}, istream_iterator<string>());
+
+        if(pieces.size() == 4) // It has only x,y,z information saved
+        {
+            H_0_n0(order, 0) = stod(pieces[0].c_str());
+            H_0_n0(order, 1) = stod(pieces[1].c_str());
+            H_0_n0(order, 2) = stod(pieces[2].c_str());
+            H_0_n0(order, 3) = stod(pieces[3].c_str());
+            order++;
+        }
+    }
+    return H_0_n0;
 }
 
 } // namespace sfmDataIO
