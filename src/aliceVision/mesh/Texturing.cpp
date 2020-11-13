@@ -453,6 +453,7 @@ void Texturing::generateTexturesSubSet(const mvsUtils::MultiViewParams& mp,
     for(std::size_t atlasID: atlasIDs)
         accuPyramids[atlasID].init(texParams.nbBand, texParams.textureSide, texParams.textureSide);
 
+   
     //for each camera, for each texture, iterate over triangles and fill the accuPyramids map
     for(int camId = 0; camId < contributionsPerCamera.size(); ++camId)
     {

@@ -133,7 +133,7 @@ public:
     bool loadFromBin(const std::string& binFileName);
     void saveToBin(const std::string& binFileName);
     bool loadFromObjAscii(const std::string& objAsciiFileName);
-
+    void saveToXYZ(std::string xyzFileName);
     void addMesh(const Mesh& mesh);
 
     void getTrisMap(StaticVector<StaticVector<int>>& out, const mvsUtils::MultiViewParams& mp, int rc, int scale, int w, int h);
