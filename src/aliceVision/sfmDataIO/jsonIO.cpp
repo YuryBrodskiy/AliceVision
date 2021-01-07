@@ -332,6 +332,8 @@ bool saveJSON(const sfmData::SfMData& sfmData, const std::string& filename, ESfM
   // file version
   saveMatrix("version", version, fileTree);
 
+  saveMatrix("H_0_n0", sfmData.H_0_n0, fileTree);
+
   // folders
   if(!sfmData.getRelativeFeaturesFolders().empty())
   {
@@ -464,8 +466,12 @@ bool loadJSON(sfmData::SfMData& sfmData, const std::string& filename, ESfMData p
   // read the json file and initialize the tree
   bpt::read_json(filename, fileTree);
 
+
+
   // version
   loadMatrix("version", version, fileTree);
+  if(fileTree.count("H_0_n0"))
+    loadMatrix("H_0_n0", sfmData.H_0_n0, fileTree);
 
   // folders
   if(fileTree.count("featuresFolders"))
@@ -621,6 +627,7 @@ bool loadJSON(sfmData::SfMData& sfmData, const std::string& filename, ESfMData p
 
   return true;
 }
+
 
 } // namespace sfmDataIO
 } // namespace aliceVision

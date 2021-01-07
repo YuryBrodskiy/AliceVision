@@ -13,7 +13,7 @@
 #include <aliceVision/mvsData/StaticVector.hpp>
 #include <aliceVision/mvsData/Voxel.hpp>
 #include <aliceVision/mvsUtils/common.hpp>
-
+#include <Eigen/Eigen>
 #include <geogram/points/kd_tree.h>
 
 namespace aliceVision {
@@ -127,6 +127,9 @@ public:
 
     Mesh();
     ~Mesh();
+
+    Eigen::Matrix4d H_0_n0 = Eigen::Matrix4d::Identity();
+    
 
     void saveToObj(const std::string& filename);
 

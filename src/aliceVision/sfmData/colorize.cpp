@@ -123,5 +123,43 @@ void colorizeTracks(SfMData& sfmData)
   }
 }
 
+void colorizeTracksV2(SfMData& sfmData) 
+{
+    boost::progress_display progressBar(sfmData.getViews().size(), std::cout, "\nCompute scene structure color\n");
+    std::map <IndexT, std::vector<Landmark*>> lm_map;
+    for(auto& lm : sfmData.getLandmarks())
+    {
+        lm.second.rgb = image::BLACK;
+        for(const auto& proj : lm.second.observations)
+        {
+            const auto& viewId = proj.first;
+            lm_map[viewId].push_back(&lm.second);
+        }
+    }
+
+    for(auto& pair : lm_map)
+    {
+        progressBar += 1; 
+        const auto& viewId = pair.first;
+        const View& view = sfmData.getView(viewId);
+        image::Image<image::RGBColor> image;
+        image::readImage(view.getImagePath(), image, image::EImageColorSpace::SRGB);
+        // for(Landmark* lm : pair.second)
+#pragma omp parallel for
+        for(int i = 0; i < pair.second.size(); ++i)
+        {
+            Landmark* lm = pair.second[i];
+            auto proj = lm->observations.at(viewId);
+            Vec2 pt = proj.x;
+            if(pt.x() == clamp(pt.x(), 0.0, static_cast<double>(image.Width() - 1)) &&
+               pt.y() == clamp(pt.y(), 0.0, static_cast<double>(image.Height() - 1)) )
+            {
+                lm->rgb += image(pt.y(), pt.x()) / lm->observations.size();
+            }
+        }
+    }
+
+}
+
 } // namespace sfm
 } // namespace aliceVision

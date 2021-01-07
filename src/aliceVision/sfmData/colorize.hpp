@@ -19,6 +19,7 @@ class SfMData;
  * @param[in,out] sfmData The container of the data
  */
 void colorizeTracks(SfMData& sfmData);
+void colorizeTracksV2(SfMData& sfmData);
 
 } // namespace sfmData
 } // namespace aliceVision

@@ -936,6 +936,18 @@ void Texturing::saveAsOBJ(const bfs::path& dir, const std::string& basename, ima
     // create .OBJ file
     FILE* fobj = fopen(objFilename.c_str(), "w");
 
+    Eigen::IOFormat eiva_bumper_format(10, Eigen::DontAlignCols, " ", "\n", "#EIVAt ");
+    std::stringstream eiva_transform_bumper;
+    eiva_transform_bumper << "# \n"
+                          << "# Wavefront OBJ file\n"
+                          << "# Created with AliceVision\n"
+                          << "# \n";
+    eiva_transform_bumper << H_0_n0.format(eiva_bumper_format) << std::endl;
+    eiva_transform_bumper << "# \n";
+    ALICEVISION_LOG_INFO("H_0_n0 \n\n\n" << H_0_n0.format(eiva_bumper_format));
+
+    fprintf(fobj, eiva_transform_bumper.str().c_str());
+    
     // header
     fprintf(fobj, "# \n");
     fprintf(fobj, "# Wavefront OBJ file\n");

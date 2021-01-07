@@ -34,8 +34,22 @@ void Mesh::saveToObj(const std::string& filename)
   ALICEVISION_LOG_INFO("Nb points: " << pts.size());
   ALICEVISION_LOG_INFO("Nb triangles: " << tris.size());
 
+  Eigen::IOFormat eiva_bumper_format(10, Eigen::DontAlignCols, " ", "\n", "#EIVAt ");
+
+
+
   FILE* f = fopen(filename.c_str(), "w");
 
+  std::stringstream eiva_transform_bumper;
+  eiva_transform_bumper << "# \n"
+                        << "# Wavefront OBJ file\n"
+                        << "# Created with AliceVision\n"
+                        << "# \n";
+  eiva_transform_bumper << H_0_n0.format(eiva_bumper_format) << std::endl;
+  eiva_transform_bumper << "# \n";
+  ALICEVISION_LOG_INFO("H_0_n0 \n\n\n" << H_0_n0.format(eiva_bumper_format));
+
+  fprintf(f, eiva_transform_bumper.str().c_str());
   fprintf(f, "# \n");
   fprintf(f, "# Wavefront OBJ file\n");
   fprintf(f, "# Created with AliceVision\n");
@@ -121,10 +135,10 @@ void Mesh::saveToXYZ(std::string xyzFileName)
     ALICEVISION_LOG_DEBUG("Save points to xyz.");
     // printf("open\n");
     FILE* f = fopen(xyzFileName.c_str(), "wb");
-    int npts = pts->size();
+    int npts = pts.size();
 
-	for(int i = 0; i < pts->size(); i++)
-        fprintf(f, "%f %f %f\n", (*pts)[i].x, (*pts)[i].y, (*pts)[i].z);
+	for(int i = 0; i < pts.size(); i++)
+        fprintf(f, "%f %f %f\n", pts[i].x, pts[i].y, pts[i].z);
     fclose(f);
     // printf("done\n");
     mvsUtils::printfElapsedTime(t, "Save points to xyz ");

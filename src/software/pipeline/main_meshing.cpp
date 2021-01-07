@@ -486,12 +486,37 @@ int aliceVision_main(int argc, char* argv[])
                       if(colorizeOutput)
                         sfmData::colorizeTracks(densePointCloud);
                       sfmDataIO::Save(densePointCloud, (outDirectory/"densePointCloud_raw.abc").string(), sfmDataIO::ESfMData::ALL_DENSE);
+                      ALICEVISION_LOG_INFO("Save dense point cloud before cut and filtering. SFM");
+                     sfmDataIO::Save(densePointCloud, (outDirectory / "densePointCloud_raw.sfm").string(),
+                                      sfmDataIO::ESfMData::STRUCTURE);
+                      ALICEVISION_LOG_INFO("Save dense point cloud before cut and filtering. SFM DONE");
                     }
 
                     delaunayGC.createGraphCut(&hexah[0], cams, outDirectory.string()+"/", outDirectory.string()+"/SpaceCamsTracks/", false);
                     delaunayGC.graphCutPostProcessing();
                     mesh = delaunayGC.createMesh();
                     delaunayGC.createPtsCams(ptsCams);
+                    if(colorizeOutput)
+                    {
+                        sfmData::SfMData densePointCloud;
+                        createDenseSfMData(sfmData, mp, mesh->pts.getData(), ptsCams, densePointCloud);
+                        sfmData::colorizeTracksV2(densePointCloud);
+                        // colorize output mesh before landmarks filtering
+                        // to have a 1:1 mapping between points and mesh vertices
+                        const auto& landmarks = densePointCloud.getLandmarks();
+                        std::vector<rgb>& colors = mesh->colors();
+                        colors.resize(mesh->pts.size(), {0, 0, 0});
+                        for(std::size_t i = 0; i < mesh->pts.size(); ++i)
+                        {
+                            const auto& c = landmarks.at(i).rgb;
+                            colors[i] = {c.r(), c.g(), c.b()};
+                        }
+
+                        mesh->H_0_n0 = sfmData.H_0_n0;
+                        ALICEVISION_LOG_INFO("Save obj mesh file.");
+
+                        mesh->saveToObj(outDirectory.string() + "/coloredMesh.obj");
+                    }
                     mesh::meshPostProcessing(mesh, ptsCams, mp, outDirectory.string()+"/", nullptr, &hexah[0]);
 
                     break;
@@ -516,13 +541,12 @@ int aliceVision_main(int argc, char* argv[])
 
     if(ptsCams.empty())
       throw std::runtime_error("Points visibilities data has not been initialized.");
-
     sfmData::SfMData densePointCloud;
     createDenseSfMData(sfmData, mp, mesh->pts.getData(), ptsCams, densePointCloud);
 
     if(colorizeOutput)
     {
-      sfmData::colorizeTracks(densePointCloud);
+      sfmData::colorizeTracksV2(densePointCloud);
       // colorize output mesh before landmarks filtering
       // to have a 1:1 mapping between points and mesh vertices
       const auto& landmarks = densePointCloud.getLandmarks();
@@ -538,8 +562,9 @@ int aliceVision_main(int argc, char* argv[])
     removeLandmarksWithoutObservations(densePointCloud);
     ALICEVISION_LOG_INFO("Save dense point cloud.");
     sfmDataIO::Save(densePointCloud, outputDensePointCloud, sfmDataIO::ESfMData::ALL_DENSE);
-
+    mesh->H_0_n0 = sfmData.H_0_n0;
     ALICEVISION_LOG_INFO("Save obj mesh file.");
+  
     mesh->saveToObj(outputMesh);
     delete mesh;
 

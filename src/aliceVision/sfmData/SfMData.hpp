@@ -72,6 +72,9 @@ public:
   Constraints2D constraints2d;
   /// Rotation priors
   RotationPriors rotationpriors;
+  
+  //Geo-referenced transformation
+  Eigen::Matrix<double, 4,4, Eigen::RowMajor> H_0_n0;
 
   SfMData();
   ~SfMData();

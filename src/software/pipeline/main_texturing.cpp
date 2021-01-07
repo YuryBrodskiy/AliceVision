@@ -219,6 +219,7 @@ int aliceVision_main(int argc, char* argv[])
     }
 
     // save final obj file
+    mesh.H_0_n0 = sfmData.H_0_n0;
     mesh.saveAsOBJ(outputFolder, "texturedMesh", outputTextureFileType);
 
     if(texParams.subdivisionTargetRatio > 0)
