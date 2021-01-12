@@ -732,7 +732,39 @@ void visitObject(IObject iObj, M44d mat, sfmData::SfMData& sfmdata, ESfMData fla
   else if(IXform::matches(md))
   {
     IXform xform(iObj, kWrapExisting);
-    readXform(xform, mat, sfmdata, flagsPart, isReconstructed);
+
+    if(iObj.getName() == "geoTransformation")
+    {
+        IXformSchema schema = xform.getSchema();
+        XformSample xsample;
+        schema.get(xsample);
+
+        M44d transformation = xsample.getMatrix();
+
+        sfmdata.H_0_n0(0, 0) = transformation[0][0];
+        sfmdata.H_0_n0(0, 1) = transformation[0][1];
+        sfmdata.H_0_n0(0, 2) = transformation[0][2];
+        sfmdata.H_0_n0(0, 3) = transformation[0][3];
+
+        sfmdata.H_0_n0(1, 0) = transformation[1][0];
+        sfmdata.H_0_n0(1, 1) = transformation[1][1];
+        sfmdata.H_0_n0(1, 2) = transformation[1][2];
+        sfmdata.H_0_n0(1, 3) = transformation[1][3];
+
+        sfmdata.H_0_n0(2, 0) = transformation[2][0];
+        sfmdata.H_0_n0(2, 1) = transformation[2][1];
+        sfmdata.H_0_n0(2, 2) = transformation[2][2];
+        sfmdata.H_0_n0(2, 3) = transformation[2][3];
+
+        sfmdata.H_0_n0(3, 0) = transformation[3][0];
+        sfmdata.H_0_n0(3, 1) = transformation[3][1];
+        sfmdata.H_0_n0(3, 2) = transformation[3][2];
+        sfmdata.H_0_n0(3, 3) = transformation[3][3];
+    }
+    else
+    {
+      readXform(xform, mat, sfmdata, flagsPart, isReconstructed);
+    }
   }
   else if(ICamera::matches(md) && ((flagsPart & ESfMData::VIEWS) ||
                                    (flagsPart & ESfMData::INTRINSICS) ||

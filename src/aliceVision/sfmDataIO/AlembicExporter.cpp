@@ -260,6 +260,34 @@ void AlembicExporter::addSfM(const sfmData::SfMData& sfmData, ESfMData flagsPart
 
   if(flagsPart & ESfMData::STRUCTURE)
   {
+    Alembic::AbcGeom::OXform xform(_dataImpl->_mvgPointCloud, "geoTransformation");
+
+    XformSample xformsample;
+    Abc::M44d xformMatrix;
+
+    xformMatrix[0][0] = sfmData.H_0_n0(0, 0);
+    xformMatrix[0][1] = sfmData.H_0_n0(0, 1);
+    xformMatrix[0][2] = sfmData.H_0_n0(0, 2);
+    xformMatrix[0][3] = sfmData.H_0_n0(0, 3);
+
+    xformMatrix[1][0] = sfmData.H_0_n0(1, 0);
+    xformMatrix[1][1] = sfmData.H_0_n0(1, 1);
+    xformMatrix[1][2] = sfmData.H_0_n0(1, 2);
+    xformMatrix[1][3] = sfmData.H_0_n0(1, 3);
+
+    xformMatrix[2][0] = sfmData.H_0_n0(2, 0);
+    xformMatrix[2][1] = sfmData.H_0_n0(2, 1);
+    xformMatrix[2][2] = sfmData.H_0_n0(2, 2);
+    xformMatrix[2][3] = sfmData.H_0_n0(2, 3);
+
+    xformMatrix[3][0] = sfmData.H_0_n0(3, 0);
+    xformMatrix[3][1] = sfmData.H_0_n0(3, 1);
+    xformMatrix[3][2] = sfmData.H_0_n0(3, 2);
+    xformMatrix[3][3] = sfmData.H_0_n0(3, 3);
+
+    xformsample.setMatrix(xformMatrix);
+    xform.getSchema().set(xformsample);
+
     const sfmData::LandmarksUncertainty noUncertainty;
 
     addLandmarks(sfmData.getLandmarks(),
